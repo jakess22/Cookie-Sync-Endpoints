@@ -8,7 +8,7 @@ To Add Feature Tools in feature_tools.py:
 2. Write the function in feature_tools.py.
 3. Have the function return a list.
 4. Add the feature object name to the “redirect_column_names” list as a string (the position before 'sota_cs' is suggested).
-5. Add the feature object name to the “redirect_features_df” list(zip()) in the same place as the name in the column name list (the position before 'sota_cs' is suggested).
+5. Add the feature object name to the “redirect_features_df” list(zip()) in the same place as the name in the column name list (the position before 'cookie_sync' is suggested).
 
 Papadapolous Cookie Synchronization Method:
 1. Extract all browser cookies set, via openWPM javascript_cookies table

@@ -10,7 +10,7 @@ To Add Feature Tools in feature_tools.py:
 4. Add the feature object name to the “redirect_column_names” list as a string (the position before 'sota_cs' is suggested).
 5. Add the feature object name to the “redirect_features_df” list(zip()) in the same place as the name in the column name list (the position before 'cookie_sync' is suggested).
 
-Papadapolous Cookie Synchronization Method:
+Papadapolous Cookie Synchronization Method (https://dl.acm.org/doi/abs/10.1145/3308558.3313542?casa_token=utdQ_eFW7ToAAAAA:cVJlTJdogGREFlOumypH7XDKIDgjvFVO3kctVb4WBGbPI5p3jWtBqS-nQab8GYVrGW4jsJ6yfduN):
 1. Extract all browser cookies set, via openWPM javascript_cookies table
     - Filter out session cookies (cookies without expiration date)
     - Parse cookie values using common delimiters (:, &)

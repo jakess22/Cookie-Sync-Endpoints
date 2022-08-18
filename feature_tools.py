@@ -5,6 +5,7 @@ import tldextract
 import re
 import os
 import json
+from pandarallel import pandarallel
 
 # Citations:
 # (1) KHALEESI/code/feature_extraction.ipynb --> https://github.com/uiowa-irl/Khaleesi/blob/main/code/feature_extraction.ipynb
@@ -573,6 +574,7 @@ def getLocationHeader(headers: list[tuple]):
 	location_headers = []
 	for header in headers:
 		i = header[1].find('location')
+		i_2 = header[1].find('Location')
 		if i != -1:
 			j = i + len('location') + 3
 			k = 0
@@ -583,18 +585,19 @@ def getLocationHeader(headers: list[tuple]):
 				k += 1
 			location_header = header_substring[:k]
 			location_headers.append(location_header)
+		elif i_2 != -1:
+			j = i_2 + len('Location') + 3
+			k = 0
+			header_substring = header[1][j:]
+			for char in header_substring:
+				if char == '"':
+					break
+				k += 1
+			location_header = header_substring[:k]
+			location_headers.append(location_header)
 		else:
-			i = header[1].find('Location')
-			if i != -1:
-				j = i + len('Location') + 3
-				k = 0
-				header_substring = header[1][j:]
-				for char in header_substring:
-					if char == '"':
-						break
-					k += 1
-				location_header = header_substring[:k]
-				location_headers.append(location_header)
+			empty_list = []
+			location_headers.append(empty_list)
 	return location_headers
 
 """Checks requested url parameters, reqeusted url paths, and request headers for instances of cookie like ID sharing"""
@@ -614,7 +617,6 @@ def getRedirectIDSharingEvents(url_params: list[tuple], referrer_urls: list[tupl
 	param_ids = getCookieStrings(url_params)
 	path_ids = getCookieStrings(url_paths)
 	location_header_ids = getCookieStrings(location_headers)
-
 
 	# check for id sharing events and output lists of ids shared
 	# ids_to_check: possibly new shared id-looking-strings in redirects
@@ -700,19 +702,19 @@ def getCookieSyncs(param_shared_ids: list[list[str]], path_shared_ids: list[list
 # - - - end of ground truth labeling functions
 
 # README: to add features, add feature column name to this list, and add corresponding object name down below
-redirect_column_names = ['param_shared_ids', 'path_shared_ids', 'loc_header_shared_ids', 'redirect_id_sharing_events', 'url_str_lens', 'req_header_num', 'semicolon_in_query', 'samesite_none_in_header',\
+redirect_column_names = ['redirect_id_sharing_events', 'url_str_lens', 'req_header_num', 'semicolon_in_query', 'samesite_none_in_header',\
 	'p3p_in_header', 'etag_in_header', 'uuid_in_url', 'tracking_keywords_next_to_special_char', 'subdomain_check',\
 	'special_char_count', 'req_query_str_lens', 'req_query_cookies_num', 'header_cookies_num',\
-	'tracking_keywords_in_url', 'query_url_check', 'shared_with_third_party', 'cookie_syncs']
+	'tracking_keywords_in_url', 'query_url_check', 'cookie_syncs']
 
 
-def redirect_extraction(crawl_db):
+def redirect_extraction(crawl_db, nb_workers, progress_bar, verbose, use_memory_fs):
 	# README: only using top 100 sites + 8 case study crawls for alpha testing. Will adjust implementation to handle whole dataset when it is ready
 	# README: if only testing a feature function, do not run getRedirectIDSharingEvents(). It takes a long time and will slow down your testing.
 
 
 	# **************** Start Kev's testing ****************
-	
+
 	# - - - SQL Data extraction
 	connection = sqlite3.connect(crawl_db)
 	cursor = connection.cursor()
@@ -742,22 +744,24 @@ def redirect_extraction(crawl_db):
 	connection.close()
 	# - - -
 
+	#pandarallel.initialize(nb_workers=nb_workers, progress_bar=progress_bar, verbose=verbose, use_memory_fs=use_memory_fs)
+
+
 	"""README: if only testing a feature function, do not run sharedWithThirdParty(). It takes a long time and will slow down your testing."""
 	# - - - Papadapolous Method
 	req_query_str_lens, req_query_strs = queryStringLength(new_req_urls)
 
+	# do not add to redirect_features_df
 	response_header_cookies = getResponseHeaderCookies(response_headers)
 	user_cookies = makeCookieObjects(js_cookies, response_header_cookies, response_headers)
-
+	# do not add to redirect_features_df
 	user_cookies = parseDelimiters(user_cookies)
 
 	# load json of known organization domain names
 	entity_json = open("entity_map.json")
 	entity_map = json.load(entity_json)
 
-	shared_with_third_party = []
 	#shared_with_third_party = sharedWithThirdParty(old_req_urls, new_req_urls, entity_map)
-
 
 	param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, known_cookies = getRedirectIDSharingEvents(req_query_strs, old_req_urls, new_req_urls, headers)
 	print(sum(redirect_id_sharing_events), 'ID Sharing events labelled out of ', len(redirect_id_sharing_events), 'redirects\n')
@@ -794,15 +798,15 @@ def redirect_extraction(crawl_db):
 	# - - -
 
 	# README: to add features, add feature object to this list, and add corresponding column name to redirect_column_names list above
-	redirect_features_df = pd.DataFrame(list(zip(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, url_str_lens, req_header_num, semicolon_in_query, samesite_none_in_header,\
+	redirect_features_df = pd.DataFrame(list(zip(redirect_id_sharing_events, url_str_lens, req_header_num, semicolon_in_query, samesite_none_in_header,\
 		p3p_in_header, etag_in_header, uuid_in_url, tracking_keywords_next_to_special_char, subdomain_check,\
 		special_char_count, req_query_str_lens, req_query_cookies_num, header_cookies_num,\
-		tracking_keywords_in_url, query_url_check, shared_with_third_party, cookie_syncs)), columns = redirect_column_names)
-
+		tracking_keywords_in_url, query_url_check, cookie_syncs)), columns = redirect_column_names)
+	
 	return redirect_features_df
 
 
 
-def feature_extraction(crawl_db):
-	redirect_features_df = redirect_extraction(crawl_db)
+def feature_extraction(crawl_db, nb_workers, progress_bar, verbose, use_memory_fs):
+	redirect_features_df = redirect_extraction(crawl_db, nb_workers, progress_bar, verbose, use_memory_fs)
 	return redirect_features_df

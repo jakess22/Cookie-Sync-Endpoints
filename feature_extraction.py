@@ -8,9 +8,12 @@ if __name__ == '__main__':
 	for filename in os.listdir('crawls'):
 		crawl_db = os.path.join('crawls', filename)
 		if os.path.isfile(crawl_db):
+			print("Extracting features from", filename)
 			crawl_df = feature_extraction(crawl_db)
 			db_df_list.append(crawl_df)
+		print()
 		print(filename, "completed")
+		print("- - - - - - - - -\n")
 	df_final = pd.concat(db_df_list)
 
 	if os.path.exists('classifier_features_dataset.csv'):

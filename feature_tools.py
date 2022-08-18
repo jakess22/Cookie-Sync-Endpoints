@@ -23,7 +23,7 @@ tracking_keywords = ['track', 'ad', 'bid', 'cookie', 'sync', 'cs', 'csync', 'css
 		   	'popunder', 'punder', 'tpid', 'advertising', 'iframe', 'googlead', 'collect', 'switch', 'swap']
 
 class Cookie:
-	def __init__(self, visit_id=0, expiry='no_value', host='none', value='no_value', same_site='no_value'):
+	def __init__(self, visit_id=0, expiry='expiry_unknown', host='host_unknown', value='no_value', same_site='no_value'):
 		self.visit_id = visit_id
 		self.expiry = expiry
 		self.host = host
@@ -38,7 +38,7 @@ class Cookie:
 		self.same_site = other.same_site
 
 	def display(self):
-		print(self.value)
+		print(self.host, self.value)
 
 # - - - helper functions
 def getHeaderCookieCount(header_substring: str):
@@ -121,26 +121,6 @@ def getTopLevelUrl(site_urls: list[tuple], header: list[tuple]):
 		if url[0] == visit_id:
 			return url[1]
 
-"""Extract and return cookie_ids from a string"""
-def getCookieStrings(strings: list[str]):
-	cookies = []
-
-	for x in strings:
-		sub_list = []
-		if x != None:
-			# find alphanumeric strings >= 10
-			cookie_id = ''
-			for char in x:
-				if char.isalnum() or char == '-':
-					cookie_id += char
-				elif len(cookie_id) >= 10:
-					sub_list.append(cookie_id)
-					cookie_id = ''
-				else:
-					cookie_id = ''
-		cookies.append(sub_list)
-	return cookies
-# - - -
 
 # - - - Feature extraction functions
 def urlStringLength(urls: list[tuple]):
@@ -161,7 +141,7 @@ def queryStringLength(urls: list[tuple]):
 		i = url[1].find('?')
 		query_len = 0
 		query_str = None
-		if i != -1:
+		if i != -1: # if '?' is present
 			split = url[1].split('?')
 			query_len = len(split[1])
 			query_str = split[1]
@@ -333,37 +313,143 @@ def requestURLContainsUUID(urls: list[tuple]):
 			# - - -
 	return uuid_check
 
-"""Returns whether (ref_url, req_url) tuple is to a third party"""
-def newDomainCheck(old_req_urls: list[tuple], new_req_urls: list[tuple]):
-	domain_check = []
-
-	for (referrer, request) in zip(old_req_urls, new_req_urls):
-		tld_ref = tldextract.extract(referrer[1])
-		tld_req = tldextract.extract(request[1])
-
-		if tld_ref.domain == tld_req.domain and tld_ref.suffix == tld_req.suffix:
-			domain_check.append(0)
-		else:
-			domain_check.append(1)
-	return domain_check
 
 referrer_keywords = ['refUrl', 'refurl', 'refURL', 'redir', 'redirect', 'refer', 'referrer',\
 'ref', 'siteID', 'site_id', 'site_ID', 'publisher', 'nw', 'ex', 'partner', 'receive', 'rurl']
 
+
+
+
+# - - - Ground Truth Labeling functions - CS events
+"""Extract and return cookie_ids from a string"""
+def getCookieStrings(strings: list[str]):
+	cookies = []
+
+	for x in strings:
+		sub_list = [] # list of cookie IDs found
+		if x != None:
+			# find alphanumeric strings > 10
+			cookie_id = ''
+			for char in x:
+				if char.isalnum() or char == '-': # if alphanum or '-', continue adding to cookie_id
+					cookie_id += char
+				elif len(cookie_id) > 10: # if not alphanum or '-' and len > 10, end cookie_id string and add to list
+					sub_list.append(cookie_id)
+					cookie_id = ''
+				else: # else, end cookie string
+					cookie_id = ''
+		cookies.append(sub_list)
+	return cookies
+
+
+"""Returns if cookie has at least one number in it"""
+"""filter false-positives: 'doubleclick', 'casalamedia', 'CheckForPermission', 'amazon-adsystem"""
+"""Assume all cookie IDs have at least 1 number --> minimize false positives"""
+def hasAtLeastOneNumber(cookie):
+	found_number = False
+	for char in cookie:
+		if char.isnumeric():
+			return True
+	return False
+
+
+"""Return cookie IDs in Set-Cookie header"""
+def getResponseHeaderCookies(response_headers: list[tuple]):
+	set_cookie_keywords = ['Set-Cookie', 'Set-cookie', 'set-cookie', 'set-Cookie']
+	set_cookie_headers = []
+
+
+	# make list of set-cookie header strings
+	for header in response_headers:
+		for keyword in set_cookie_keywords:
+			if keyword in header[1]:
+				if 'expires' in header[1] or 'Expires' in header[1]: # only consider non-session cookies
+					i = header[1].find(keyword)
+					i += len(keyword)
+					j = i + 1
+					while header[1][j] != ']': # count until end of set-cookie header
+						j += 1
+					set_cookie_substring = header[1][i:j] # take substring from after 'set-cookie' to end of the header
+					set_cookie_headers.append(set_cookie_substring)
+
+	# extract cookie IDs from parsed headers
+	header_cookies = getCookieStrings(set_cookie_headers)
+
+	# filter dates picked up by getCookieStrings()
+	for cookie_list in header_cookies:
+		i = 0
+		while i < len(cookie_list):
+			regex_1 = re.compile(r'[0-9][0-9]-[A-Z][a-z][a-z]-[0-9][0-9][0-9][0-9]') # 14-Jul-2022, 28-Jul-2022
+			regex_2 = re.compile(r'[0-9]-[A-Z][a-z][a-z]-[0-9][0-9][0-9][0-9]') # 1-Jul-2022
+
+			if re.fullmatch(regex_1, cookie_list[i]):
+				cookie_list.pop(i)
+				continue
+			elif re.fullmatch(regex_2, cookie_list[i]):
+				cookie_list.pop(i)
+				continue
+			else:
+				i += 1
+
+	# filter false-positives such as 'doubleclick', 'casalamedia', 'CheckForPermission', 'amazon-adsystem'
+	# Assume all cookie IDs have at least 1 number --> minimize false positives
+	for cookie_list in header_cookies:
+		i = 0
+		while i < len(cookie_list):
+			found_number = False
+			for char in cookie_list[i]:
+				if char.isnumeric():
+					found_number = True
+					break
+			if not found_number:
+				cookie_list.pop(i)
+			else:
+				i += 1
+
+	return header_cookies
+
+
 """Convert cookie_Tuple to Cookie objects"""
 """openWPM assigns the expiry of 9999-12-31T21:59:59.000Z
 to cookies that do not have an expiration date (session cookies)"""
-def makeCookieObjects(js_cookies: list[tuple]):
+def makeCookieObjects(js_cookies: list[tuple], response_header_cookies: list[list[str]], response_headers: list[tuple]):
 	cookie_objects = []
+	# convert js_cookies tuples to Cookie objects
+	# js_cookie[1] = expiration date
+	# js_cooke[3] = cookie ID
 	for js_cookie in js_cookies:
-		if js_cookie[1] != '9999-12-31T21:59:59.000Z':
-			new_cookie_obj = Cookie(js_cookie[0], js_cookie[1], js_cookie[2], js_cookie[3], js_cookie[4])
-			cookie_objects.append(new_cookie_obj)
+		if js_cookie[1] != '9999-12-31T21:59:59.000Z': # filter session cookies (no expiration date)
+			if len(js_cookie[3]) > 10: # Pap. method string length requirement
+				if hasAtLeastOneNumber(js_cookie[3]): # assume cookie_ids need at least 1 number, to minimize false positives
+					cookie_found = False
+					for cookie in cookie_objects: # prevent duplicate cookie IDs
+						if cookie.value == js_cookie[3]:
+							cookie_found = True
+							break
+					if not cookie_found: # create new Cookie object
+						new_cookie_obj = Cookie(js_cookie[0], js_cookie[1], js_cookie[2], js_cookie[3], js_cookie[4])
+						cookie_objects.append(new_cookie_obj)
+
+	# convert header_cookie strings to Cookie objects
+	overlap = 0 # overlap between js_cookies and header_cookies, just out of curiosity
+	for (header_cookie_list, response) in zip(response_header_cookies, response_headers):
+		for header_cookie in header_cookie_list:
+			for cookie_object in cookie_objects: # prevent duplicate cookies
+				cookie_found = False
+				if cookie_object.value == header_cookie:
+					cookie_found = True
+					break
+			if not cookie_found: # create new Cookie object
+				new_cookie_obj = Cookie(visit_id=response_headers[0], host=response_headers[2], value=header_cookie)
+				cookie_objects.append(new_cookie_obj)
+			else:
+				overlap += 1
+	#print(overlap)
 	return cookie_objects
+
 
 """Checks for delimiters in cookies and splits cookie_ID if found. Will update old cookie.value with first split,
 and make new cookie object with the second split."""
-"""Not finalized"""
 def parseDelimiters(cookies: list[Cookie()]):
 	delimiters = [':', '&']
 	i = 0
@@ -372,60 +458,86 @@ def parseDelimiters(cookies: list[Cookie()]):
 			if d in cookie.value:
 				split = cookie.value.split(d)
 
-				# update initial cookie value with newly parsed value
-				cookie.value = split[0]
+				if len(split[0]) > 10 and len(split[1]) > 10: # 10 = Pap. method cookie id length requirement
+					# update initial cookie value with newly parsed value
+					cookie.value = split[0]
 
-				# make new cookie with other parsed value, sharing all other element values as original (i.e host, expiration)
-				new_cookie = Cookie()
-				new_cookie.copy(cookie)
-				new_cookie.value = split[1]
-				cookies.append(new_cookie)
+					# make new cookie with other parsed value, sharing all other element values as original (i.e host, expiration)
+					new_cookie = Cookie()
+					new_cookie.copy(cookie)
+					new_cookie.value = split[1]
+					cookies.append(new_cookie)
+				elif len(split[0]) > 10 and len(split[1]) < 10:
+					cookie.value = split[0] # update original value
+				elif len(split[0]) < 10 and len(split[1]) > 10:
+					cookie.value = split[1] # update original value
+
 	return cookies
 
+
 """Checks if requested url is to a third party from the referrer. First checks PS+1, then uses entity map lookup. """
-def sharedWithThirdParty(ref_url: str, req_url: str, entity_map: json):
-	ref_tld = tldextract.extract(ref_url)
-	req_tld = tldextract.extract(req_url)
+def sharedWithThirdParty(ref_urls: list[tuple], req_urls: list[tuple], entity_map: json):
+	shared_with_third_party = []
 
-	if ref_tld.domain == req_tld.domain:
-		if ref_tld.suffix == req_tld.suffix:
-			return False # shared with first party
+	for (ref_url, req_url) in zip(ref_urls, req_urls):
+		ref_tld = tldextract.extract(ref_url[1])
+		req_tld = tldextract.extract(req_url[1])
 
-	ref_entity = ''
-	req_entity = ''
-	# find referrer entity in map
-	for entity in entity_map:
-		for property in entity_map[entity]['properties']:
-			prop_tld = tldextract.extract(property)
-			if prop_tld.domain == ref_tld.domain:
-				if prop_tld.suffix == ref_tld.suffix:
-					ref_entity = entity
-	# find request entity in map
-	for entity in entity_map:
-		for property in entity_map[entity]['properties']:
-			prop_tld = tldextract.extract(property)
-			if prop_tld.domain == req_tld.domain:
-				if prop_tld.suffix == req_tld.suffix:
-					req_entity = entity
+		# quickly check PS+1
+		if ref_tld.domain == req_tld.domain:
+			if ref_tld.suffix == req_tld.suffix:
+				shared_with_third_party.append(0) # shared with first party
+				continue
 
-	if ref_entity != req_entity:
-		return 1
-	else:
-		return 0
+		ref_entity = ''
+		req_entity = ''
+		# find referrer entity in map
+		ref_found = False
+		for entity in entity_map:
+			for property in entity_map[entity]['properties']:
+				prop_tld = tldextract.extract(property)
+				if prop_tld.domain == ref_tld.domain:
+					if prop_tld.suffix == ref_tld.suffix:
+						ref_entity = entity
+						ref_found = True
+		# find request entity in map
+		req_found = False
+		for entity in entity_map:
+			for property in entity_map[entity]['properties']:
+				prop_tld = tldextract.extract(property)
+				if prop_tld.domain == req_tld.domain:
+					if prop_tld.suffix == req_tld.suffix:
+						req_entity = entity
+						req_found = True
+
+		# if PS+1 don't match, and if neither entities found, assume third parties
+		if not ref_found or not req_found:
+			shared_with_third_party.append(1)
+			continue
+
+		# compare referrer and request entities
+		if ref_entity != req_entity:
+			shared_with_third_party.append(1)
+		else:
+			shared_with_third_party.append(0)
+	return shared_with_third_party
+
 
 """Adds unknown cookies to known_cookies map, returns id_sharing event if known cookie """
-def checkCookieIsKnown(cookies_to_check, ref_url, req_url, known_cookies, entity_map):
-	cookies_found = []
+def checkIDisKnown(ids_to_check: list[str], ref_url: str, req_url: str, known_ids: map):
+	# ids_to_check: possibly new shared id-looking-strings in redirects
+	# known_ids: map of id-looking-strings already discovered
+	ids_found = []
 
-	if sharedWithThirdParty(ref_url, req_url, entity_map):
-		for cookie_to_check in cookies_to_check:
-			if cookie_to_check in known_cookies:
-				cookies_found.append(cookie_to_check)
-			else:
-				tld = tldextract.extract(req_url)
-				known_cookies[cookie_to_check] = tld.domain
+	for id_to_check in ids_to_check:
+		if id_to_check in known_ids:
+			ids_found.append(id_to_check)
+		else: # add to known_cookies map
+			tld = tldextract.extract(req_url)
+			known_ids[id_to_check] = tld.domain
 
-	return cookies_found
+
+	return ids_found
 
 """Returns URL paths"""
 def getURLPaths(urls: list[tuple]):
@@ -487,8 +599,8 @@ def getLocationHeader(headers: list[tuple]):
 
 """Checks requested url parameters, reqeusted url paths, and request headers for instances of cookie like ID sharing"""
 def getRedirectIDSharingEvents(url_params: list[tuple], referrer_urls: list[tuple], requested_urls: list[tuple], headers: list[tuple]):
-	# (cookie_ID, url_domain)
-	known_cookies = {}
+	# (id-looking-string, url_domain)
+	known_ids = {}
 
 	param_shared_ids = []
 	path_shared_ids = []
@@ -498,25 +610,24 @@ def getRedirectIDSharingEvents(url_params: list[tuple], referrer_urls: list[tupl
 	location_headers = getLocationHeader(headers)
 	# later, check Set-Cookie header too
 
-	# getCookieStrings() returns a list of possible cookie_ids for each edge (row) --> returns a 2D list
-	param_cookies = getCookieStrings(url_params)
-	path_cookies = getCookieStrings(url_paths)
-	location_header_cookies = getCookieStrings(location_headers)
+	# getCookieStrings() returns a list of possible id-looking-strings for each edge (row) --> returns a 2D list
+	param_ids = getCookieStrings(url_params)
+	path_ids = getCookieStrings(url_paths)
+	location_header_ids = getCookieStrings(location_headers)
 
-	# load json of known organization domain names
-	entity_json = open("entity_map.json")
-	entity_map = json.load(entity_json)
 
 	# check for id sharing events and output lists of ids shared
-	for (edge_param_cookies, edge_path_cookies, edge_loc_header_cookies, ref_url, req_url) in zip(param_cookies, path_cookies, location_header_cookies, referrer_urls, requested_urls):
-		found_param_cookies = checkCookieIsKnown(edge_param_cookies, ref_url[1], req_url[1], known_cookies, entity_map) # check if a user cookie_id shared in url parameters, else add to hash
-		param_shared_ids.append(found_param_cookies)
+	# ids_to_check: possibly new shared id-looking-strings in redirects
+	# known_ids: map of id-looking-strings already discovered
+	for (edge_param_ids, edge_path_ids, edge_loc_header_ids, ref_url, req_url) in zip(param_ids, path_ids, location_header_ids, referrer_urls, requested_urls):
+		found_param_ids = checkIDisKnown(edge_param_ids, ref_url[1], req_url[1], known_ids) # check if a user cookie_id shared in url parameters, else add to hash
+		param_shared_ids.append(found_param_ids)
 
-		found_path_cookies = checkCookieIsKnown(edge_path_cookies, ref_url[1], req_url[1], known_cookies, entity_map) # check if a user cookie_id shared in url path, else add to hash
-		path_shared_ids.append(found_path_cookies)
+		found_path_ids = checkIDisKnown(edge_path_ids, ref_url[1], req_url[1], known_ids) # check if a user cookie_id shared in url path, else add to hash
+		path_shared_ids.append(found_path_ids)
 
-		found_loc_header_cookies = checkCookieIsKnown(edge_loc_header_cookies, ref_url[1], req_url[1], known_cookies, entity_map) # check if a user cookie_id shared in location header, else add to hash
-		loc_header_shared_ids.append(found_loc_header_cookies)
+		found_loc_header_ids = checkIDisKnown(edge_loc_header_ids, ref_url[1], req_url[1], known_ids) # check if a user cookie_id shared in location header, else add to hash
+		loc_header_shared_ids.append(found_loc_header_ids)
 
 	# output list of id sharing events
 	id_shared = []
@@ -526,7 +637,7 @@ def getRedirectIDSharingEvents(url_params: list[tuple], referrer_urls: list[tupl
 		else:
 			id_shared.append(0)
 
-	return param_shared_ids, path_shared_ids, loc_header_shared_ids, id_shared, known_cookies
+	return param_shared_ids, path_shared_ids, loc_header_shared_ids, id_shared, known_ids
 
 """Returns if id == a value in user_cookies"""
 def idMatch(id: str, user_cookies: list[Cookie()]):
@@ -535,49 +646,73 @@ def idMatch(id: str, user_cookies: list[Cookie()]):
 			return 1
 	return 0
 
-"""Checks shared IDs against stored user IDs. If match --> cookie sync"""
-def getCookieSyncs(param_shared_ids: list[list[str]], path_shared_ids: list[list[str]], loc_header_shared_ids: list[list[str]], redirect_id_sharing_events: list[int], user_cookies: list[Cookie()]):
-	cookie_syncs = []
+"""Increments CS count for associated domain"""
+def incrementCSCount(req_url, endpoint_cs_count):
+	url_split = req_url[1].split('?')
+	domain = url_split[0]
 
-	for (edge_param_id_list, edge_path_id_list, edge_loc_id_list, id_shared) in zip(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events):
+	if 'http://' in domain:
+		domain = domain[7:]
+	elif 'https://' in domain:
+		domain = domain[8:]
+
+	if domain in endpoint_cs_count:
+		endpoint_cs_count[domain] += 1
+	else:
+		endpoint_cs_count[domain] = 1
+	return endpoint_cs_count
+
+"""Checks shared IDs against stored user IDs. If match --> cookie sync"""
+def getCookieSyncs(param_shared_ids: list[list[str]], path_shared_ids: list[list[str]], loc_header_shared_ids: list[list[str]], redirect_id_sharing_events: list[int], user_cookies: list[Cookie()], new_req_urls):
+	cookie_syncs = []
+	endpoint_cs_count = {}
+
+	for (edge_param_id_list, edge_path_id_list, edge_loc_id_list, id_shared, req_url) in zip(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, new_req_urls):
 		if id_shared:
 			id_found = False
 			for id in edge_param_id_list:
 				if idMatch(id, user_cookies):
 					cookie_syncs.append(1)
+					domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
 					id_found = True
 					break
 			if not id_found:
 				for id in edge_path_id_list:
 					if idMatch(id, user_cookies):
 						cookie_syncs.append(1)
+						domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
+
 						id_found = True
 						break
 			if not id_found:
 				for id in edge_loc_id_list:
 					if idMatch(id, user_cookies):
 						cookie_syncs.append(1)
+						domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
 						id_found = True
 						break
 			if not id_found:
 				cookie_syncs.append(0)
 		else:
 			cookie_syncs.append(0)
-	return cookie_syncs
+	return cookie_syncs, endpoint_cs_count
 
-
+# - - - end of ground truth labeling functions
 
 # README: to add features, add feature column name to this list, and add corresponding object name down below
 redirect_column_names = ['param_shared_ids', 'path_shared_ids', 'loc_header_shared_ids', 'redirect_id_sharing_events', 'url_str_lens', 'req_header_num', 'semicolon_in_query', 'samesite_none_in_header',\
 	'p3p_in_header', 'etag_in_header', 'uuid_in_url', 'tracking_keywords_next_to_special_char', 'subdomain_check',\
-	'special_char_count', 'req_query_str_lens', 'req_query_cookies', 'header_cookies_num',\
-	'tracking_keywords_in_url', 'new_domain_check', 'query_url_check', 'cookie_syncs']
+	'special_char_count', 'req_query_str_lens', 'req_query_cookies_num', 'header_cookies_num',\
+	'tracking_keywords_in_url', 'query_url_check', 'shared_with_third_party', 'cookie_syncs']
 
 
 def redirect_extraction(crawl_db):
 	# README: only using top 100 sites + 8 case study crawls for alpha testing. Will adjust implementation to handle whole dataset when it is ready
 	# README: if only testing a feature function, do not run getRedirectIDSharingEvents(). It takes a long time and will slow down your testing.
 
+
+	# **************** Start Kev's testing ****************
+	
 	# - - - SQL Data extraction
 	connection = sqlite3.connect(crawl_db)
 	cursor = connection.cursor()
@@ -601,25 +736,45 @@ def redirect_extraction(crawl_db):
 	cursor.execute("SELECT visit_id, expiry, host, value, same_site FROM javascript_cookies")
 	js_cookies = cursor.fetchall()
 
+	cursor.execute("SELECT visit_id, headers, url FROM http_responses")
+	response_headers = cursor.fetchall()
+
 	connection.close()
 	# - - -
 
-	"""README: if only testing a feature function, do not run getRedirectIDSharingEvents(). It takes a long time and will slow down your testing."""
+	"""README: if only testing a feature function, do not run sharedWithThirdParty(). It takes a long time and will slow down your testing."""
 	# - - - Papadapolous Method
 	req_query_str_lens, req_query_strs = queryStringLength(new_req_urls)
-	user_cookies = makeCookieObjects(js_cookies)
+
+	response_header_cookies = getResponseHeaderCookies(response_headers)
+	user_cookies = makeCookieObjects(js_cookies, response_header_cookies, response_headers)
+
 	user_cookies = parseDelimiters(user_cookies)
 
-	param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, known_cookies = getRedirectIDSharingEvents(req_query_strs, old_req_urls, new_req_urls, headers)
-	print(sum(redirect_id_sharing_events), 'ID Sharing events labelled out of ', len(redirect_id_sharing_events), 'redirects')
+	# load json of known organization domain names
+	entity_json = open("entity_map.json")
+	entity_map = json.load(entity_json)
 
-	cookie_syncs = getCookieSyncs(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, user_cookies)
-	print(sum(cookie_syncs), 'Cookie Sync events labelled out of ', len(cookie_syncs), 'redirects')
+	shared_with_third_party = []
+	#shared_with_third_party = sharedWithThirdParty(old_req_urls, new_req_urls, entity_map)
+
+
+	param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, known_cookies = getRedirectIDSharingEvents(req_query_strs, old_req_urls, new_req_urls, headers)
+	print(sum(redirect_id_sharing_events), 'ID Sharing events labelled out of ', len(redirect_id_sharing_events), 'redirects\n')
+
+	cookie_syncs, endpoint_cs_count = getCookieSyncs(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, user_cookies, new_req_urls)
+	print(sum(cookie_syncs), 'Cookie Sync events labelled out of ', len(cookie_syncs), 'redirects\n')
+
+	print("Domain CS counts:")
+	for x in endpoint_cs_count:
+		print(x, endpoint_cs_count[x])
 	# - - -
+
+	# **************** End Kev's testing ****************
 
 
 	# - - - Explicit Features:
-	req_query_cookies = numberOfQueryCookies(req_query_strs)
+	req_query_cookies_num = numberOfQueryCookies(req_query_strs)
 	# - - -
 
 	# - - - Non-Explicit Features: features to be used only for ML classifier. Not needed to label CSyncs
@@ -635,17 +790,14 @@ def redirect_extraction(crawl_db):
 	tracking_keywords_next_to_special_char = trackingKeywordsNextToSpecialChar(new_req_urls)
 	subdomain_check = subdomainCheck(new_req_urls)
 	special_char_count = specialCharCount(req_query_strs)
-
-	# newDomainCheck(): only consider an event to be a CS if it is a request to a new domain. This will still consider google.com --> cm.g.doubleclick as a CS
-	new_domain_check = newDomainCheck(old_req_urls, new_req_urls)
 	query_url_check = urlInQuery(req_query_strs)
 	# - - -
 
 	# README: to add features, add feature object to this list, and add corresponding column name to redirect_column_names list above
 	redirect_features_df = pd.DataFrame(list(zip(param_shared_ids, path_shared_ids, loc_header_shared_ids, redirect_id_sharing_events, url_str_lens, req_header_num, semicolon_in_query, samesite_none_in_header,\
 		p3p_in_header, etag_in_header, uuid_in_url, tracking_keywords_next_to_special_char, subdomain_check,\
-		special_char_count, req_query_str_lens, req_query_cookies, header_cookies_num,\
-		tracking_keywords_in_url, new_domain_check, query_url_check, cookie_syncs)), columns = redirect_column_names)
+		special_char_count, req_query_str_lens, req_query_cookies_num, header_cookies_num,\
+		tracking_keywords_in_url, query_url_check, shared_with_third_party, cookie_syncs)), columns = redirect_column_names)
 
 	return redirect_features_df
 

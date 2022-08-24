@@ -6,9 +6,10 @@ feature_tools.py: iterates over inputted crawl database and extracts individual 
 To Add Feature Tools in feature_tools.py:
 1. In the SQL Data Extraction section of redirect_extraction(), ensure the SQL database column your function requires is loaded.
 2. Write the function in feature_tools.py.
-3. Have the function return a list.
-4. Add the feature object name to the “redirect_column_names” list as a string (the position before 'sota_cs' is suggested).
-5. Add the feature object name to the “redirect_features_df” list(zip()) in the same place as the name in the column name list (the position before 'cookie_sync' is suggested).
+3. To write a parallelized function, call it using new_dataframe_column = dataframe_column_passed_as_argument.parallel_apply(function_to_apply), with the only parameter of function_to_apply being a pd.DataFrame() column. 
+4. Have the function return a list, pd.DataFrame() column, or pd.Series().
+5. Add the feature object name to the “redirect_column_names” list as a string (the position before 'cookie_sync' is suggested).
+6. Add the feature object name to the data variable in the same place as the name in the column name list (the position before 'cookie_sync' is suggested).
 
 Papadapolous Cookie Synchronization Method (https://dl.acm.org/doi/abs/10.1145/3308558.3313542?casa_token=utdQ_eFW7ToAAAAA:cVJlTJdogGREFlOumypH7XDKIDgjvFVO3kctVb4WBGbPI5p3jWtBqS-nQab8GYVrGW4jsJ6yfduN):
 1. Extract all browser cookies set, via openWPM javascript_cookies table

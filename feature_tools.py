@@ -262,54 +262,43 @@ def getCookieStrings(strings: pd.DataFrame()):
 	cookies = []
 
 	# extract cookie_id strings
-	for x in strings:
-		sub_list = [] # list of cookie IDs found
-		if x != None:
-			# find alphanumeric strings > 10
-			cookie_id = ''
-			for char in x:
-				# does extract delimiters ('&', ':'),
-				if char.isalnum() or char == '-' or char == '&' or char == ':': # if alphanum or '-', continue adding to cookie_id
-					cookie_id += char
-				elif len(cookie_id) > 10: # if not alphanum or '-' or delim and len > 10, end cookie_id string and add to list
-						sub_list.append(cookie_id)
-						cookie_id = ''
-				else: # else, end cookie string
-					cookie_id = ''
-		cookies.append(sub_list)
+	for string in strings:
+		cookies_in_string = set() # list of cookie IDs found
+		if string != None:
+			# Citation (1): Khaleesi cookie extraction method
+			if string.count('=') >= 1:
+				cookie = string.split('=', 1)
+				cookies_in_string |= set(re.split('[^a-zA-Z0-9_=&:-]', cookie[1]))
+				cookies_in_string.add(cookie[1])
+			# remove IDs <= 10 chars
+			cookies_in_string = set([s for s in list(cookies_in_string) if len(s) > 10])
+
+		cookies.append(list(cookies_in_string))
+
+
+
 
 	# parse delimiters
-	delimeters = [':', '&']
+	delimiters = [':', '&']
 	for edge_list in cookies:
 		i = 0
 		while i < len(edge_list):
 			pop_check = False
-			for delim in delimeters:
+			for delim in delimiters:
 				if i < len(edge_list):
 					if delim in edge_list[i]:
-						find_delim = edge_list[i].find(delim)
-						while find_delim != -1: # to handle multiple occurences of same delimeter
-							if i < len(edge_list):
-								split = edge_list[i].split(delim)
-							else:
-								break
-							if len(split[0]) > 10 and len(split[1]) > 10:
-								edge_list[i] = split[0]
-								edge_list.append(split[1])
-							elif len(split[0]) > 10 and len(split[1]) <= 10:
-								edge_list[i] = split[0]
-							elif len(split[0]) <= 10 and len(split[1]) > 10:
-								edge_list[i] = split[1]
-							elif len(split[0]) <= 10 and len(split[1]) <= 10:
-								edge_list.pop(i)
-							if i < len(edge_list):
-								find_delim = edge_list[i].find(delim)
-							else:
-								break
-				else:
-					break
+						split = edge_list[i].split(delim)
+						edge_list.pop(i)
+						pop_check = True
+						for val in split:
+							if len(val) > 10:
+								edge_list.append(val)
+					else:
+						continue
 			if not pop_check:
 				i += 1
+
+
 	return cookies
 
 
@@ -327,7 +316,8 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
 				for header in header_json:
 					if keyword == header[0]:
 						if 'expires' in header[1] or 'Expires' in header[1]: # only consider non-session cookies
-							set_cookie_headers.append(header[1])
+							header_split = header[1].split(';')
+							set_cookie_headers.append(header_split[0])
 					else:
 						continue
 
@@ -345,13 +335,16 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
 			regex_4 = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}') # 2022-08-01-21
 
 			if re.fullmatch(regex_1, cookie_list[i]):
-				cookie_list.pop(i)
+				if len(cookie_list) > 0:
+					cookie_list.pop(i)
 				continue
 			elif re.fullmatch(regex_2, cookie_list[i]):
-				cookie_list.pop(i)
+				if len(cookie_list) > 0:
+					cookie_list.pop(i)
 				continue
 			elif re.fullmatch(regex_3, cookie_list[i]):
-				cookie_list.pop(i)
+				if len(cookie_list) > 0:
+					cookie_list.pop(i)
 				continue
 			else:
 				i += 1
@@ -362,7 +355,9 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
 	'casalemedia', 'Only', 'only', 'Same', 'same', 'site', 'Site', 'rubicon', 'project', 'pubmatic', 'yahoo', 'cloudfare', 'http', 'HTTP', 'com', 'org' \
 	'comment', 'Consent', 'consent', 'yahoo', 'web', 'platform', 'microsoft', 'market', 'strict', 'Strict', 'Sync', 'sync', 'www', 'user', 'User', 'cookie' \
 	'tag', 'Tag', 'comment', 'Comment', 'facebook', 'smart', 'server', 'post', 'bounce', 'exchange', 'express', 'net', 'world', 'wide', 'target', \
-	'network', 'Network', 'gdpr', 'GDPR', 'status', 'code', 'media', 'found', 'FOUND', 'flash']
+	'network', 'Network', 'gdpr', 'GDPR', 'status', 'code', 'media', 'found', 'FOUND', 'flash', 'browser', 'data', 'test', 'share', 'pinterest', 'personalization', \
+	'session', 'Session', 'cookie', 'block', 'Block', 'Server', 'server', 'host', 'Host', 'Routing', 'routing', 'Key', 'key', 'captcha', 'CAPTCHA', 'enforce', 'policy', \
+	'intuit', 'connect', 'route', 'Flash', 'flash', 'match', 'Match', 'mobile', 'acess', 'Access']
 
 	for cookie_list in header_cookies:
 		i = 0
@@ -375,6 +370,7 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
 					break
 			if not word_found:
 				i += 1
+
 
 	return header_cookies
 

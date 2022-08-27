@@ -13,6 +13,12 @@ from urllib.parse import urlparse
 
 entity_hash = ""
 
+with open("./word_lists/tracking.txt") as f:
+    tracking_keywords = [word for word in f.read().strip().split("\n")]
+
+with open("./.word_lists/common.txt") as f:
+    common_words = [word for word in f.read().strip().split("\n")]
+
 
 class Cookie:
     def __init__(self, host="host_unknown", value="no_value", is_session="no_value"):
@@ -29,125 +35,12 @@ class Cookie:
         print("(", self.host, ":", self.value, ")")
 
 
-tracking_keywords = [
-    "track",
-    "ad",
-    "bid",
-    "cookie",
-    "sync",
-    "cs",
-    "csync",
-    "cssync",
-    "cksync",
-    "pixel",
-    "rtb",
-    "match",
-    "cm",
-    "usersync",
-    "getuid",
-    "uid",
-    "gif",
-    "bounce",
-    "click",
-    "measurement",
-    "measure",
-    "promoted",
-    "pagead",
-    "hit",
-    "banner",
-    "2mdn",
-    "adsystem",
-    "adsense",
-    "ptracking",
-    "beacon",
-    "openx",
-    "aralego",
-    "usermatch",
-    "appnexus",
-    "popunder",
-    "punder",
-    "metrics",
-    "tpid",
-    "pixel",
-    "idsync",
-    "id_sync",
-    "uuid",
-    "uid",
-    "advertising",
-    "adsync",
-    "dspid",
-    "dpid",
-    "dpuuid",
-    "tracking",
-    "delivery",
-    "pid",
-    "id_sync",
-    "pxl",
-    "1x1",
-    "px",
-    "pix",
-    "analytics",
-    "adserver",
-    "bidder",
-    "ads",
-    "adform",
-    "advert",
-    "iframe",
-    "googlead",
-    "advertise",
-    "prebid",
-    "zoneid",
-    "siteid",
-    "pageid",
-    "viewid",
-    "zone_id",
-    "google_afc",
-    "google_afs",
-    "google_gid",
-    "google_cver",
-    "pix",
-    "rtb",
-    "ssp",
-    "dsp",
-    "dmt",
-    "sync",
-    "doubleclick",
-    "match",
-    "tid",
-    "google_nid",
-    "google_dbm",
-    "google_cm",
-    "google_sc",
-    "pagead",
-    "measure",
-    "promote",
-    "banner",
-    "2mdn",
-    "adsystem",
-    "adsense",
-    "beacon",
-    "opnex",
-    "aralego",
-    "usermatch",
-    "metrics",
-    "appnexus",
-    "popunder",
-    "punder",
-    "tpid",
-    "advertising",
-    "iframe",
-    "googlead",
-    "collect",
-    "switch",
-    "swap",
-]
-
 # - - - helper functions
 
 """Check if a URL exists in inputted url_queries"""
 
 
-def urlInQuery(req_query_strs: pd.DataFrame()):
+def urlInQuery(req_query_strs: pd.DataFrame):
     url_check = []
     for query in req_query_strs:
         if query != None:
@@ -196,7 +89,7 @@ def getTopLevelUrl(site_urls: list[tuple], header: list[tuple]):
 
 
 # - - - Feature extraction functions
-def urlStringLength(urls: pd.DataFrame()):
+def urlStringLength(urls: pd.DataFrame):
     url_str_lens = []
     for url in urls:
         resource = urlparse(url)
@@ -204,7 +97,7 @@ def urlStringLength(urls: pd.DataFrame()):
     return url_str_lens
 
 
-def getQueryStrings(urls: pd.DataFrame()):
+def getQueryStrings(urls: pd.DataFrame):
     query_strs = []
     for url in urls:
         resource = urlparse(url)
@@ -212,7 +105,7 @@ def getQueryStrings(urls: pd.DataFrame()):
     return query_strs
 
 
-def getQueryStringLengths(queries: pd.DataFrame()):
+def getQueryStringLengths(queries: pd.DataFrame):
     query_lengths = []
     for query in queries:
         if query != None:
@@ -222,14 +115,14 @@ def getQueryStringLengths(queries: pd.DataFrame()):
     return query_lengths
 
 
-def requestHeadersNumber(headers: pd.DataFrame()):
+def requestHeadersNumber(headers: pd.DataFrame):
     request_header_count = []
     for header in headers:
         request_header_count.append(header.count("[") - 1)
     return request_header_count
 
 
-def semicolonInQuery(query_strs: pd.DataFrame()):
+def semicolonInQuery(query_strs: pd.DataFrame):
     semicolon_query_check = []
     for (i, query) in query_strs.items():
         if query != None:
@@ -242,7 +135,7 @@ def semicolonInQuery(query_strs: pd.DataFrame()):
     return semicolon_query_check
 
 
-def numberOfQueryCookies(query_strs: pd.DataFrame()):
+def numberOfQueryCookies(query_strs: pd.DataFrame):
     query_cookie_count = []
     for query in query_strs:
         cookie_count = []
@@ -253,7 +146,7 @@ def numberOfQueryCookies(query_strs: pd.DataFrame()):
     return query_cookie_count
 
 
-def urlContainsUUID(urls: pd.DataFrame()):
+def urlContainsUUID(urls: pd.DataFrame):
     uuid_check = []
     for url in urls:
         if "uid" in url[1] or "UID" in url[1] or "uuid" in url[1] or "UUID" in url[1]:
@@ -269,7 +162,7 @@ def urlContainsUUID(urls: pd.DataFrame()):
     return uuid_check
 
 
-def trackingKeywordsInUrl(urls: pd.DataFrame()):
+def trackingKeywordsInUrl(urls: pd.DataFrame):
     tracking_keyword_check = []
     for url in urls:
         keyword_found = False
@@ -283,7 +176,7 @@ def trackingKeywordsInUrl(urls: pd.DataFrame()):
     return tracking_keyword_check
 
 
-def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame()):
+def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame):
     keyword_char_adjacent_check = []
 
     for url in urls:
@@ -302,7 +195,7 @@ def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame()):
     return keyword_char_adjacent_check
 
 
-def subdomainCheck(urls: pd.DataFrame()):
+def subdomainCheck(urls: pd.DataFrame):
     subdomain_check = []
 
     for url in urls:
@@ -314,7 +207,7 @@ def subdomainCheck(urls: pd.DataFrame()):
     return subdomain_check
 
 
-def specialCharCount(query_strs: pd.DataFrame()):
+def specialCharCount(query_strs: pd.DataFrame):
     special_char_count = []
     for (i, query) in query_strs.items():
         count = 0
@@ -327,7 +220,7 @@ def specialCharCount(query_strs: pd.DataFrame()):
     return special_char_count
 
 
-def headerContainsSameSiteNone(headers: pd.DataFrame()):
+def headerContainsSameSiteNone(headers: pd.DataFrame):
     same_site_none_check = []
 
     for header in headers:
@@ -343,7 +236,7 @@ def headerContainsSameSiteNone(headers: pd.DataFrame()):
     return same_site_none_check
 
 
-def headerContainsP3P(headers: pd.DataFrame()):
+def headerContainsP3P(headers: pd.DataFrame):
     p3p_check = []
     for header in headers:
         if "p3p" in header or "P3P" in header:
@@ -353,7 +246,7 @@ def headerContainsP3P(headers: pd.DataFrame()):
     return p3p_check
 
 
-def headerContainsETag(headers: pd.DataFrame()):
+def headerContainsETag(headers: pd.DataFrame):
     etag_check = []
     for header in headers:
         if "etag" in header or "ETag" in header or "Etag" in header or "ETAG" in header:
@@ -363,7 +256,7 @@ def headerContainsETag(headers: pd.DataFrame()):
     return etag_check
 
 
-def requestURLContainsUUID(urls: pd.DataFrame()):
+def requestURLContainsUUID(urls: pd.DataFrame):
     uuid_check = []
     for url in urls:
         if "uid" in url or "UID" in url or "uuid" in url or "UUID" in url:
@@ -404,7 +297,7 @@ referrer_keywords = [
 """Extract and return cookie_ids from a string"""
 
 
-def getCookieStrings(strings: pd.DataFrame()):
+def getCookieStrings(strings: pd.DataFrame):
     cookies = []
 
     # extract cookie_id strings
@@ -503,123 +396,6 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
                 i += 1
 
     # filter IDs by common false-positive words
-    common_words = [
-        "Expires",
-        "expires",
-        "Path",
-        "path",
-        "Check",
-        "check",
-        "Permission",
-        "permission",
-        "Domain",
-        "domain",
-        "doubleclick",
-        "media" "Secure",
-        "secure",
-        "None",
-        "none",
-        "Privacy",
-        "privacy",
-        "max",
-        "MAX",
-        "Max",
-        "age",
-        "AGE",
-        "amazon",
-        "adsystem",
-        "secure",
-        "Secure",
-        "demdex" "casalemedia",
-        "Only",
-        "only",
-        "Same",
-        "same",
-        "site",
-        "Site",
-        "rubicon",
-        "project",
-        "pubmatic",
-        "yahoo",
-        "cloudfare",
-        "http",
-        "HTTP",
-        "com",
-        "org" "comment",
-        "Consent",
-        "consent",
-        "yahoo",
-        "web",
-        "platform",
-        "microsoft",
-        "market",
-        "strict",
-        "Strict",
-        "Sync",
-        "sync",
-        "www",
-        "user",
-        "User",
-        "cookie" "tag",
-        "Tag",
-        "comment",
-        "Comment",
-        "facebook",
-        "smart",
-        "server",
-        "post",
-        "bounce",
-        "exchange",
-        "express",
-        "net",
-        "world",
-        "wide",
-        "target",
-        "network",
-        "Network",
-        "gdpr",
-        "GDPR",
-        "status",
-        "code",
-        "media",
-        "found",
-        "FOUND",
-        "flash",
-        "browser",
-        "data",
-        "test",
-        "share",
-        "pinterest",
-        "personalization",
-        "session",
-        "Session",
-        "cookie",
-        "block",
-        "Block",
-        "Server",
-        "server",
-        "host",
-        "Host",
-        "Routing",
-        "routing",
-        "Key",
-        "key",
-        "captcha",
-        "CAPTCHA",
-        "enforce",
-        "policy",
-        "intuit",
-        "connect",
-        "route",
-        "Flash",
-        "flash",
-        "match",
-        "Match",
-        "mobile",
-        "acess",
-        "Access",
-    ]
-
     for cookie_list in header_cookies:
         i = 0
         while i < len(cookie_list):
@@ -687,7 +463,7 @@ def makeCookieObjects(
 """Returns the organization a URL belongs to, if known"""
 
 
-def findEntity(urls: pd.DataFrame()):
+def findEntity(urls: pd.DataFrame):
     entities = []
 
     for url in urls:
@@ -706,7 +482,7 @@ def findEntity(urls: pd.DataFrame()):
 """Checks if requested url is to a third party from the referrer."""
 
 
-def sharedWithThirdParty(old_req_urls: pd.DataFrame(), new_req_urls: pd.DataFrame()):
+def sharedWithThirdParty(old_req_urls: pd.DataFrame, new_req_urls: pd.DataFrame):
     shared_with_third_party = []
 
     ref_entities = old_req_urls.parallel_apply(findEntity)
@@ -715,7 +491,7 @@ def sharedWithThirdParty(old_req_urls: pd.DataFrame(), new_req_urls: pd.DataFram
     for (index_1, ref_entity), (index_2, req_entity) in zip(
         ref_entities.iterrows(), req_entities.iterrows()
     ):
-        # ref_entity, req_entity = Series() of length = 1
+        # ref_entity, req_entity = Series of length = 1
 
         if ref_entity[0] == None or req_entity[0] == None:
             shared_with_third_party.append(1)
@@ -761,7 +537,7 @@ def getURLPaths(urls: list[tuple]):
 """Returns location headers"""
 
 
-def getLocationHeader(headers: pd.Series()):
+def getLocationHeader(headers: pd.Series):
     location_headers = []
 
     for (index, header_str) in headers.items():
@@ -788,9 +564,9 @@ def getLocationHeader(headers: pd.Series()):
 
 
 def getRedirectIDSharingEvents(
-    url_params: pd.Series(),
-    requested_urls: pd.DataFrame(),
-    headers: pd.DataFrame(),
+    url_params: pd.Series,
+    requested_urls: pd.DataFrame,
+    headers: pd.DataFrame,
     shared_with_third_party: list[int],
 ):
     # (id-looking-string, url_domain)

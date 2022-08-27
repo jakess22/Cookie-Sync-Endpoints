@@ -5,6 +5,7 @@ import pandas as pd
 import sqlite3
 import tldextract
 from pandarallel import pandarallel
+from typing import Union
 from urllib.parse import urlparse
 
 # Citations:
@@ -979,8 +980,8 @@ def redirect_extraction(
     parallelize: bool,
     progress_bar: bool,
     verbose: bool,
-    use_memory_fs: bool,
-    entity_map: map,
+    use_memory_fs: Union[bool, None],
+    entity_map: dict[str, str],
 ):
     # README: only using top 100 sites + 8 case study crawls for alpha testing. Will adjust implementation to handle whole dataset when it is ready
     # README: if only testing a feature function, do not run getRedirectIDSharingEvents(). It takes a long time and will slow down your testing.
@@ -1133,8 +1134,8 @@ def feature_extraction(
     parallelize: bool,
     progress_bar: bool,
     verbose: bool,
-    use_memory_fs: bool,
-    entity_map: map,
+    use_memory_fs: Union[bool, None],
+    entity_map: dict[str, str],
 ):
     redirect_features_df = redirect_extraction(
         crawl_db, parallelize, progress_bar, verbose, use_memory_fs, entity_map

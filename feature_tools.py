@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import pandas as pd
 import sqlite3
@@ -16,8 +15,11 @@ entity_hash = ""
 with open("./word_lists/tracking.txt") as f:
     tracking_keywords = [word for word in f.read().strip().split("\n")]
 
-with open("./.word_lists/common.txt") as f:
+with open("./word_lists/common.txt") as f:
     common_words = [word for word in f.read().strip().split("\n")]
+
+with open("./word_lists/referrer.txt") as f:
+    referrer_keywords = [word for word in f.read().strip().split("\n")]
 
 
 class Cookie:
@@ -36,11 +38,14 @@ class Cookie:
 
 
 # - - - helper functions
-
-"""Check if a URL exists in inputted url_queries"""
-
-
-def urlInQuery(req_query_strs: pd.DataFrame):
+def urlInQuery(req_query_strs: pd.DataFrame) -> list[int]:
+    """
+    Check if a URL exists in inputted url_queries
+    :param req_query_strs: DataFrame of queries to check
+    :returns: list of 0s and 1s corresponding to whether each query had a URL or not
+              0: no URL in query
+              1: URL in query
+    """
     url_check = []
     for query in req_query_strs:
         if query != None:
@@ -55,10 +60,12 @@ def urlInQuery(req_query_strs: pd.DataFrame):
     return url_check
 
 
-"""Returns all url_queries in headers"""
-
-
-def getHeaderQueries(headers: list[tuple]):
+def getHeaderQueries(headers: list[tuple]) -> list[str]:
+    """
+    Gets all url_queries in headers
+    :param headers: list of URL headers to extract header queries from
+    :returns: list of header queries corresponding to each header
+    """
     url_in_query = []
     for header in headers:
         i = header[1].find("?")
@@ -78,7 +85,13 @@ def getHeaderQueries(headers: list[tuple]):
     return url_in_query
 
 
-def getTopLevelUrl(site_urls: list[tuple], header: list[tuple]):
+def getTopLevelUrl(site_urls: list[tuple], header: list[tuple]) -> Union[str, None]:
+    """
+    Gets the top level url
+    :param site_urls:
+    :param header:
+    :returns: the top level url
+    """
     if len(site_urls) == 1:
         return site_urls[0][1]
     visit_id = header[0]
@@ -89,7 +102,12 @@ def getTopLevelUrl(site_urls: list[tuple], header: list[tuple]):
 
 
 # - - - Feature extraction functions
-def urlStringLength(urls: pd.DataFrame):
+def urlStringLength(urls: pd.DataFrame) -> list[int]:
+    """
+    Creates a list of URL string lengths
+    :param url: DataFrame of URLs
+    :returns: list of URL string lengths
+    """
     url_str_lens = []
     for url in urls:
         resource = urlparse(url)
@@ -97,7 +115,12 @@ def urlStringLength(urls: pd.DataFrame):
     return url_str_lens
 
 
-def getQueryStrings(urls: pd.DataFrame):
+def getQueryStrings(urls: pd.DataFrame) -> list[str]:
+    """
+    Creates a list of URL query strings
+    :param url: DataFrame of URLs
+    :returns: list of URL query strings
+    """
     query_strs = []
     for url in urls:
         resource = urlparse(url)
@@ -105,7 +128,12 @@ def getQueryStrings(urls: pd.DataFrame):
     return query_strs
 
 
-def getQueryStringLengths(queries: pd.DataFrame):
+def getQueryStringLengths(queries: pd.DataFrame) -> list[int]:
+    """
+    Creates a list of URL query string lengths
+    :param url: DataFrame of URL queries
+    :returns: list of URL query string lenghts
+    """
     query_lengths = []
     for query in queries:
         if query != None:
@@ -115,16 +143,28 @@ def getQueryStringLengths(queries: pd.DataFrame):
     return query_lengths
 
 
-def requestHeadersNumber(headers: pd.DataFrame):
+def requestHeadersNumber(headers: pd.DataFrame) -> list[int]:
+    """
+    Creates a list of URL header counts
+    :param url: DataFrame of URL headers
+    :returns: list of URL header counts
+    """
     request_header_count = []
     for header in headers:
         request_header_count.append(header.count("[") - 1)
     return request_header_count
 
 
-def semicolonInQuery(query_strs: pd.DataFrame):
+def semicolonInQuery(query_strs: pd.DataFrame) -> list[int]:
+    """
+    Checks if there is a semicolon in each of the URL query in the list
+    :param query_strs: DataFrame of queries to check
+    :returns: list of 0s and 1s corresponding to whether each query had a semicolon or not
+              0: no semicolon in query
+              1: semicolon in query
+    """
     semicolon_query_check = []
-    for (i, query) in query_strs.items():
+    for query in query_strs.values:
         if query != None:
             if ";" in query:
                 semicolon_query_check.append(1)
@@ -135,7 +175,12 @@ def semicolonInQuery(query_strs: pd.DataFrame):
     return semicolon_query_check
 
 
-def numberOfQueryCookies(query_strs: pd.DataFrame):
+def numberOfQueryCookies(query_strs: pd.DataFrame) -> list[int]:
+    """
+    Gets the number of query cookies for each URL query in the list
+    :param query_strs: DataFrame of queries to check
+    :returns: list of number of query cookies corresponding to each query in query_strs
+    """
     query_cookie_count = []
     for query in query_strs:
         cookie_count = []
@@ -146,7 +191,14 @@ def numberOfQueryCookies(query_strs: pd.DataFrame):
     return query_cookie_count
 
 
-def urlContainsUUID(urls: pd.DataFrame):
+def urlContainsUUID(urls: pd.DataFrame) -> list[int]:
+    """
+    Checks if UUID keyword is in each of the URLs in the list
+    :param urls: DataFrame of URLs to check
+    :returns: list of 0s and 1s corresponding to whether each URL had a UUID keyword in it or not
+              0: no UUID keyword in URL
+              1: UUID keyword in URL
+    """
     uuid_check = []
     for url in urls:
         if "uid" in url[1] or "UID" in url[1] or "uuid" in url[1] or "UUID" in url[1]:
@@ -162,7 +214,14 @@ def urlContainsUUID(urls: pd.DataFrame):
     return uuid_check
 
 
-def trackingKeywordsInUrl(urls: pd.DataFrame):
+def trackingKeywordsInUrl(urls: pd.DataFrame) -> list[int]:
+    """
+    Checks if any tracking keywords are found in each of the URLs in the list
+    :param urls: DataFrame of URLs to check
+    :returns: list of 0s and 1s corresponding to whether each URL had any tracking keywords or not
+              0: no tracking keywords in URL
+              1: at least 1 tracking keyword in URL
+    """
     tracking_keyword_check = []
     for url in urls:
         keyword_found = False
@@ -176,7 +235,14 @@ def trackingKeywordsInUrl(urls: pd.DataFrame):
     return tracking_keyword_check
 
 
-def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame):
+def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame) -> list[int]:
+    """
+    Checks if any tracking keywords are next to a special character (non-alphanumeric) in each of the URLs in the list
+    :param urls: DataFrame of URLs to check
+    :returns: list of 0s and 1s corresponding to whether any tracking keywords are next to a special character
+              0: no tracking keyword next to special character in URL
+              1: at least 1 tracking keyword next to special character in URL
+    """
     keyword_char_adjacent_check = []
 
     for url in urls:
@@ -195,7 +261,14 @@ def trackingKeywordsNextToSpecialChar(urls: pd.DataFrame):
     return keyword_char_adjacent_check
 
 
-def subdomainCheck(urls: pd.DataFrame):
+def subdomainCheck(urls: pd.DataFrame) -> list[int]:
+    """
+    Checks if there is a subdomain in each of the URLs in the list
+    :param urls: DataFrame of URLs to check
+    :returns: list of 0s and 1s corresponding to whether there was a subdomain in the URL
+              0: no subdomain exists
+              1: yes subdomain exists
+    """
     subdomain_check = []
 
     for url in urls:
@@ -207,9 +280,14 @@ def subdomainCheck(urls: pd.DataFrame):
     return subdomain_check
 
 
-def specialCharCount(query_strs: pd.DataFrame):
+def specialCharCount(query_strs: pd.DataFrame) -> list[int]:
+    """
+    Gets the number of special characters (non-alphanumeric) for each of the queries in the list
+    :param query_strs: DataFrame of queries to check
+    :returns: list of special character counts corresponding to each query
+    """
     special_char_count = []
-    for (i, query) in query_strs.items():
+    for query in query_strs.values:
         count = 0
         if query != None:
             for char in query:
@@ -220,7 +298,14 @@ def specialCharCount(query_strs: pd.DataFrame):
     return special_char_count
 
 
-def headerContainsSameSiteNone(headers: pd.DataFrame):
+def headerContainsSameSiteNone(headers: pd.DataFrame) -> list[int]:
+    """
+    Checks if samesite is none in each of the URL headers in the list
+    :param headers: DataFrame of URL headers to check
+    :returns: list of 0s and 1s corresponding to whether samesite was none in each header
+              0: samesite NOT none
+              1: samesite none
+    """
     same_site_none_check = []
 
     for header in headers:
@@ -236,7 +321,14 @@ def headerContainsSameSiteNone(headers: pd.DataFrame):
     return same_site_none_check
 
 
-def headerContainsP3P(headers: pd.DataFrame):
+def headerContainsP3P(headers: pd.DataFrame) -> list[int]:
+    """
+    Checks if P3P is in each of the URL headers in the list
+    :param headers: DataFrame of URL headers to check
+    :returns: list of 0s and 1s corresponding to whether P3P in each header
+              0: P3P NOT in header
+              1: P3P in header
+    """
     p3p_check = []
     for header in headers:
         if "p3p" in header or "P3P" in header:
@@ -246,7 +338,14 @@ def headerContainsP3P(headers: pd.DataFrame):
     return p3p_check
 
 
-def headerContainsETag(headers: pd.DataFrame):
+def headerContainsETag(headers: pd.DataFrame) -> list[int]:
+    """
+    Checks if ETag is in each of the URL headers in the list
+    :param headers: DataFrame of URL headers to check
+    :returns: list of 0s and 1s corresponding to whether ETag in each header
+              0: ETag NOT in header
+              1: ETag in header
+    """
     etag_check = []
     for header in headers:
         if "etag" in header or "ETag" in header or "Etag" in header or "ETAG" in header:
@@ -256,7 +355,14 @@ def headerContainsETag(headers: pd.DataFrame):
     return etag_check
 
 
-def requestURLContainsUUID(urls: pd.DataFrame):
+def requestURLContainsUUID(urls: pd.DataFrame) -> list[int]:
+    """
+    Checks if UUID keyword is in each of the URL request headers in the list
+    :param headers: DataFrame of URL request headers to check
+    :returns: list of 0s and 1s corresponding to whether UUID keyword in each header
+              0: UUID keyword NOT in header
+              1: UUID in header
+    """
     uuid_check = []
     for url in urls:
         if "uid" in url or "UID" in url or "uuid" in url or "UUID" in url:
@@ -272,32 +378,9 @@ def requestURLContainsUUID(urls: pd.DataFrame):
     return uuid_check
 
 
-referrer_keywords = [
-    "refUrl",
-    "refurl",
-    "refURL",
-    "redir",
-    "redirect",
-    "refer",
-    "referrer",
-    "ref",
-    "siteID",
-    "site_id",
-    "site_ID",
-    "publisher",
-    "nw",
-    "ex",
-    "partner",
-    "receive",
-    "rurl",
-]
-
-
 # - - - Ground Truth Labeling functions - CS events
-"""Extract and return cookie_ids from a string"""
-
-
 def getCookieStrings(strings: pd.DataFrame):
+    """Extract and return cookie_ids from a string"""
     cookies = []
 
     # extract cookie_id strings
@@ -337,10 +420,8 @@ def getCookieStrings(strings: pd.DataFrame):
     return cookies
 
 
-"""Return cookie IDs in Set-Cookie header"""
-
-
 def getResponseHeaderCookies(response_headers: list[tuple]):
+    """Return cookie IDs in Set-Cookie header"""
     set_cookie_keywords = ["Set-Cookie", "Set-cookie", "set-cookie", "set-Cookie"]
     set_cookie_headers = []
 
@@ -411,16 +492,15 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
     return header_cookies
 
 
-"""Convert cookie_Tuple to Cookie objects"""
-"""openWPM assigns the expiry of 9999-12-31T21:59:59.000Z
-to cookies that do not have an expiration date (session cookies)"""
-
-
 def makeCookieObjects(
     js_cookies: list[tuple],
     response_header_cookies: list[list[str]],
     response_headers: list[tuple],
 ):
+    """
+    Convert cookie_Tuple to Cookie objects
+    NOTE: openWPM assigns the expiry of 9999-12-31T21:59:59.000Z to cookies that do not have an expiration date (session cookies)
+    """
     cookie_objects = []
     # convert js_cookies tuples to Cookie objects
     # js_cookie[0] = host
@@ -460,10 +540,8 @@ def makeCookieObjects(
     return cookie_objects
 
 
-"""Returns the organization a URL belongs to, if known"""
-
-
-def findEntity(urls: pd.DataFrame):
+def findEntity(urls: pd.DataFrame) -> list[str]:
+    """Returns the organization a URL belongs to, if known"""
     entities = []
 
     for url in urls:
@@ -479,10 +557,10 @@ def findEntity(urls: pd.DataFrame):
     return entities
 
 
-"""Checks if requested url is to a third party from the referrer."""
-
-
-def sharedWithThirdParty(old_req_urls: pd.DataFrame, new_req_urls: pd.DataFrame):
+def sharedWithThirdParty(
+    old_req_urls: pd.DataFrame, new_req_urls: pd.DataFrame
+) -> list[int]:
+    """Checks if requested url is to a third party from the referrer."""
     shared_with_third_party = []
 
     ref_entities = old_req_urls.parallel_apply(findEntity)
@@ -503,10 +581,8 @@ def sharedWithThirdParty(old_req_urls: pd.DataFrame, new_req_urls: pd.DataFrame)
     return shared_with_third_party
 
 
-"""Adds unknown cookies to known_cookies map, returns id_sharing event if known cookie """
-
-
 def checkIDisKnown(ids_to_check: list[str], req_url: str, known_ids: map):
+    """Adds unknown cookies to known_cookies map, returns id_sharing event if known cookie"""
     # ids_to_check: possibly new shared id-looking-strings in redirects
     # known_ids: map of id-looking-strings already discovered
     # ids_found: list of ids shared
@@ -523,10 +599,8 @@ def checkIDisKnown(ids_to_check: list[str], req_url: str, known_ids: map):
     return ids_shared
 
 
-"""Returns URL paths"""
-
-
 def getURLPaths(urls: list[tuple]):
+    """Returns URL paths"""
     paths = []
     for url in urls:
         resource = urlparse(url)
@@ -534,10 +608,8 @@ def getURLPaths(urls: list[tuple]):
     return paths
 
 
-"""Returns location headers"""
-
-
 def getLocationHeader(headers: pd.Series):
+    """Returns location headers"""
     location_headers = []
 
     for (index, header_str) in headers.items():
@@ -560,15 +632,13 @@ def getLocationHeader(headers: pd.Series):
     return location_headers
 
 
-"""Checks requested url parameters, reqeusted url paths, and request headers for instances of cookie like ID sharing"""
-
-
 def getRedirectIDSharingEvents(
     url_params: pd.Series,
     requested_urls: pd.DataFrame,
     headers: pd.DataFrame,
     shared_with_third_party: list[int],
 ):
+    """Checks requested url parameters, reqeusted url paths, and request headers for instances of cookie like ID sharing"""
     # (id-looking-string, url_domain)
     known_ids = {}
 
@@ -642,20 +712,16 @@ def getRedirectIDSharingEvents(
     )
 
 
-"""Returns if id == a value in user_cookies"""
-
-
-def idMatch(id: str, user_cookies: list[Cookie()]):
+def idMatch(id: str, user_cookies: list[Cookie]):
+    """Returns if id == a value in user_cookies"""
     for cookie in user_cookies:
         if cookie.value == id:
             return 1
     return 0
 
 
-"""Increments CS count for associated domain"""
-
-
 def incrementCSCount(req_url, endpoint_cs_count):
+    """Increments CS count for associated domain"""
     url_split = req_url[0].split("?")
     domain = url_split[0]
 
@@ -671,17 +737,15 @@ def incrementCSCount(req_url, endpoint_cs_count):
     return endpoint_cs_count
 
 
-"""Checks shared IDs against stored user IDs. If match --> cookie sync"""
-
-
 def getCookieSyncs(
     param_shared_ids: list[list[str]],
     path_shared_ids: list[list[str]],
     loc_header_shared_ids: list[list[str]],
     redirect_id_sharing_events: list[int],
-    user_cookies: list[Cookie()],
+    user_cookies: list[Cookie],
     new_req_urls_list: list[tuple],
 ):
+    """Checks shared IDs against stored user IDs. If match --> cookie sync"""
     cookie_syncs = []
     endpoint_cs_count = {}
 

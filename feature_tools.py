@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 # Citations:
 # (1) KHALEESI/code/feature_extraction.ipynb --> https://github.com/uiowa-irl/Khaleesi/blob/main/code/feature_extraction.ipynb
 
-entity_hash = ""
+global_entity_dict = ""
 
 with open("./word_lists/tracking.txt") as f:
     tracking_keywords = [word for word in f.read().strip().split("\n")]
@@ -185,7 +185,7 @@ def numberOfQueryCookies(query_strs: pd.DataFrame) -> list[int]:
     for query in query_strs:
         cookie_count = []
         if query != None:
-            cookie_count = getCookieStrings(query)
+            cookie_count = getURLCookieStrings(query)
 
         query_cookie_count.append(len(cookie_count))
     return query_cookie_count
@@ -379,8 +379,9 @@ def requestURLContainsUUID(urls: pd.DataFrame) -> list[int]:
 
 
 # - - - Ground Truth Labeling functions - CS events
-def getCookieStrings(strings: pd.DataFrame):
-    """Extract and return cookie_ids from a string"""
+def getHeaderCookieStrings(strings: list[str]):
+    """Extract and return cookie_ids from header string"""
+
     cookies = []
 
     # extract cookie_id strings
@@ -420,29 +421,29 @@ def getCookieStrings(strings: pd.DataFrame):
     return cookies
 
 
-def getResponseHeaderCookies(response_headers: list[tuple]):
-    """Return cookie IDs in Set-Cookie header"""
-    set_cookie_keywords = ["Set-Cookie", "Set-cookie", "set-cookie", "set-Cookie"]
+def getResponseHeaderCookies(response_headers: pd.DataFrame):
+    """return cookie_ids from header"""
+
     set_cookie_headers = []
 
     # make list of set-cookie header strings
-    for header_str in response_headers:
-        if header_str != None:
+    for (i, header_str) in response_headers.iterrows():
+        # header_str[0] = header
+        # header_str[1] = url
+
+        if header_str[0] != None:
             header_json = json.loads(header_str[0])
-            # header_json is an array of the format (0: key, 1: value)
-            for keyword in set_cookie_keywords:
-                for header in header_json:
-                    if keyword == header[0]:
-                        if (
-                            "expires" in header[1] or "Expires" in header[1]
-                        ):  # only consider non-session cookies
-                            header_split = header[1].split(";")
-                            set_cookie_headers.append(header_split[0])
-                    else:
-                        continue
+            # header_json[0] is an array of the format (0: key, 1: value)
+            for header in header_json:
+                if header[0].lower() == "set-cookie":
+                    if (
+                        "expires" in header[1] or "Expires" in header[1]
+                    ):  # only consider non-session cookies
+                        header_split = header[1].split(";")
+                        set_cookie_headers.append(header_split[0])
 
     # extract cookie IDs from parsed headers
-    header_cookies = getCookieStrings(set_cookie_headers)
+    header_cookies = getHeaderCookieStrings(set_cookie_headers)
 
     # filter dates picked up by getCookieStrings()
     for cookie_list in header_cookies:
@@ -473,6 +474,10 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
                 if len(cookie_list) > 0:
                     cookie_list.pop(i)
                 continue
+            elif re.fullmatch(regex_4, cookie_list[i]):
+                if len(cookie_list) > 0:
+                    cookie_list.pop(i)
+                continue
             else:
                 i += 1
 
@@ -482,31 +487,30 @@ def getResponseHeaderCookies(response_headers: list[tuple]):
         while i < len(cookie_list):
             word_found = False
             for common_word in common_words:
-                if common_word in cookie_list[i]:
+                if common_word in cookie_list[i].lower():
                     cookie_list.pop(i)
                     word_found = True
                     break
             if not word_found:
                 i += 1
-
     return header_cookies
 
 
 def makeCookieObjects(
-    js_cookies: list[tuple],
+    js_cookies: pd.DataFrame,
     response_header_cookies: list[list[str]],
-    response_headers: list[tuple],
+    response_headers: pd.DataFrame,
 ):
-    """
-    Convert cookie_Tuple to Cookie objects
-    NOTE: openWPM assigns the expiry of 9999-12-31T21:59:59.000Z to cookies that do not have an expiration date (session cookies)
-    """
+    """Convert cookie_Tuple to Cookie objects"""
+    """openWPM assigns the expiry of 9999-12-31T21:59:59.000Z
+    to cookies that do not have an expiration date (session cookies)"""
+
     cookie_objects = []
     # convert js_cookies tuples to Cookie objects
     # js_cookie[0] = host
     # js_cooke[1] = value
     # js_cookie[2] = is_session
-    for js_cookie in js_cookies:
+    for (i, js_cookie) in js_cookies.iterrows():
         if not js_cookie[2]:  # filter session cookies (no expiration date)
             if len(js_cookie[1]) > 10:  # Pap. method string length requirement
                 cookie_found = False
@@ -520,9 +524,12 @@ def makeCookieObjects(
                     cookie_objects.append(new_cookie_obj)
 
     # convert header_cookie strings to Cookie objects
+    # reponse_headers[0] = header
+    # response_headers[1] = response url
     overlap = 0  # overlap between js_cookies and header_cookies, just out of curiosity
+    response_headers_list = response_headers.values.tolist()
     for (header_cookie_list, response) in zip(
-        response_header_cookies, response_headers
+        response_header_cookies, response_headers_list
     ):
         for header_cookie in header_cookie_list:
             cookie_found = False
@@ -537,6 +544,7 @@ def makeCookieObjects(
             else:
                 overlap += 1
     # print(overlap)
+
     return cookie_objects
 
 
@@ -550,7 +558,7 @@ def findEntity(urls: pd.DataFrame) -> list[str]:
 
         found_entity = None
         try:
-            found_entity = entity_hash[url_etld_plus_one]
+            found_entity = global_entity_dict[url_etld_plus_one]
         except KeyError:
             pass
         entities.append(found_entity)
@@ -581,26 +589,7 @@ def sharedWithThirdParty(
     return shared_with_third_party
 
 
-def checkIDisKnown(ids_to_check: list[str], req_url: str, known_ids: map):
-    """Adds unknown cookies to known_cookies map, returns id_sharing event if known cookie"""
-    # ids_to_check: possibly new shared id-looking-strings in redirects
-    # known_ids: map of id-looking-strings already discovered
-    # ids_found: list of ids shared
-    ids_shared = []
-
-    for id_sub_list in ids_to_check:
-        for id in id_sub_list:
-            if id in known_ids:
-                ids_shared.append(id)
-            else:  # add to known_cookies map
-                tld = tldextract.extract(req_url[0])
-                known_ids[id] = tld.domain
-
-    return ids_shared
-
-
-def getURLPaths(urls: list[tuple]):
-    """Returns URL paths"""
+def getURLPaths(urls: pd.DataFrame):
     paths = []
     for url in urls:
         resource = urlparse(url)
@@ -609,7 +598,6 @@ def getURLPaths(urls: list[tuple]):
 
 
 def getLocationHeader(headers: pd.Series):
-    """Returns location headers"""
     location_headers = []
 
     for (index, header_str) in headers.items():
@@ -618,7 +606,7 @@ def getLocationHeader(headers: pd.Series):
             # header_json is an array of the format (0: key, 1: value)
             header_found = False
             for header in header_json:
-                if header[0] == "Location" or header[0] == "location":
+                if header[0].lower() == "location":
                     location_headers.append(header[1])
                     header_found = True
                     break
@@ -632,17 +620,42 @@ def getLocationHeader(headers: pd.Series):
     return location_headers
 
 
+def getURLCookieStrings(strings: list[str]):
+    cookies = []
+
+    # extract cookie_id strings
+    for string in strings:
+        cookies_in_string = []  # list of cookie IDs found
+        if string != None:
+            id_matches = re.finditer(
+                r"(?P<query>&[^=]*?=)?(?P<id>[a-zA-Z0-9_-]{10,})", string
+            )
+            id_matches_list = [i["id"] for i in id_matches]
+
+        cookies.append(list(id_matches_list))
+
+    # filter IDs by common false-positive words
+    for edge_list in cookies:
+        i = 0
+        while i < len(edge_list):
+            word_found = False
+            for common_word in common_words:
+                if common_word in edge_list[i].lower():
+                    edge_list.pop(i)
+                    word_found = True
+                    break
+            if not word_found:
+                i += 1
+
+    return cookies
+
+
 def getRedirectIDSharingEvents(
-    url_params: pd.Series,
+    url_params: pd.Series(),
     requested_urls: pd.DataFrame,
     headers: pd.DataFrame,
     shared_with_third_party: list[int],
 ):
-    """Checks requested url parameters, reqeusted url paths, and request headers for instances of cookie like ID sharing"""
-    # (id-looking-string, url_domain)
-    known_ids = {}
-
-    shared_with_third_party_df = pd.DataFrame(shared_with_third_party)
 
     param_shared_ids = []
     path_shared_ids = []
@@ -652,116 +665,96 @@ def getRedirectIDSharingEvents(
     location_headers = headers.parallel_apply(getLocationHeader)
 
     # getCookieStrings() returns a list of possible id-looking-strings for each edge (row) --> returns a 2D list
-    param_ids = url_params.parallel_apply(getCookieStrings)
-    path_ids = url_paths.parallel_apply(getCookieStrings)
-    location_header_ids = location_headers.parallel_apply(getCookieStrings)
+    param_ids = url_params.parallel_apply(getURLCookieStrings)
+    path_ids = url_paths.parallel_apply(getURLCookieStrings)
+    location_header_ids = location_headers.parallel_apply(getURLCookieStrings)
+
+    shared_with_third_party_df = pd.DataFrame(shared_with_third_party)
 
     # check for id sharing events and output lists of ids shared
-    # ids_to_check: possibly new shared id-looking-strings in redirects
-    # known_ids: map of id-looking-strings already discovered
-    for (
-        (i_1, edge_param_ids),
-        (i_2, edge_path_ids),
-        (i_3, edge_loc_header_ids),
-        (i_4, req_url),
-        (i_5, third_party_check),
-    ) in zip(
-        param_ids.iterrows(),
-        path_ids.iterrows(),
-        location_header_ids.iterrows(),
-        requested_urls.iterrows(),
-        shared_with_third_party_df.iterrows(),
-    ):
-        if third_party_check[0]:  # only consider sharing with 3rd parties
-            found_param_ids = checkIDisKnown(
-                edge_param_ids, req_url, known_ids
-            )  # check if a user cookie_id shared in url parameters, else add to hash
-            param_shared_ids.append(found_param_ids)
+    data = [
+        param_ids,
+        path_ids,
+        location_header_ids,
+        requested_urls,
+        shared_with_third_party_df,
+    ]
+    known_ids_df = pd.concat(data, axis=1)
 
-            found_path_ids = checkIDisKnown(
-                edge_path_ids, req_url, known_ids
-            )  # check if a user cookie_id shared in url path, else add to hash
-            path_shared_ids.append(found_path_ids)
-
-            found_loc_header_ids = checkIDisKnown(
-                edge_loc_header_ids, req_url, known_ids
-            )  # check if a user cookie_id shared in location header, else add to hash
-            loc_header_shared_ids.append(found_loc_header_ids)
-        else:
-            empty_list = []
-            param_shared_ids.append(empty_list)
-            path_shared_ids.append(empty_list)
-            loc_header_shared_ids.append(empty_list)
-
-    # output list of id sharing events
+    # check for id sharing events
     id_shared = []
-    for (param, path, loc) in zip(
-        param_shared_ids, path_shared_ids, loc_header_shared_ids
-    ):
-        if len(param) > 0 or len(path) > 0 or len(loc) > 0:
-            id_shared.append(1)
+    for (i, row_values) in known_ids_df.iterrows():
+        (
+            edge_param_ids,
+            edge_path_ids,
+            edge_loc_header_ids,
+            req_url,
+            third_party_check,
+        ) = row_values.to_numpy()
+
+        if third_party_check:  # only consider sharing with 3rd parties
+            if (
+                len(edge_param_ids) > 0
+                or len(edge_path_ids) > 0
+                or len(edge_loc_header_ids) > 0
+            ):
+                id_shared.append(1)
+            else:
+                id_shared.append(0)
         else:
             id_shared.append(0)
 
-    return (
-        param_shared_ids,
-        path_shared_ids,
-        loc_header_shared_ids,
-        id_shared,
-        known_ids,
-    )
+    return (param_ids, path_ids, location_header_ids, id_shared)
 
 
 def idMatch(id: str, user_cookies: list[Cookie]):
     """Returns if id == a value in user_cookies"""
     for cookie in user_cookies:
-        if cookie.value == id:
+        if cookie.value in id:
             return 1
     return 0
 
 
 def incrementCSCount(req_url, endpoint_cs_count):
-    """Increments CS count for associated domain"""
-    url_split = req_url[0].split("?")
-    domain = url_split[0]
+    resource = urlparse(req_url[0])
 
-    if "http://" in domain:
-        domain = domain[7:]
-    elif "https://" in domain:
-        domain = domain[8:]
-
-    if domain in endpoint_cs_count:
-        endpoint_cs_count[domain] += 1
+    if resource.hostname in endpoint_cs_count:
+        endpoint_cs_count[resource.hostname] += 1
     else:
-        endpoint_cs_count[domain] = 1
+        endpoint_cs_count[resource.hostname] = 1
     return endpoint_cs_count
 
 
-def getCookieSyncs(
-    param_shared_ids: list[list[str]],
-    path_shared_ids: list[list[str]],
-    loc_header_shared_ids: list[list[str]],
+def getHeuristicCookieSyncs(
+    param_shared_ids: pd.DataFrame,
+    path_shared_ids: pd.DataFrame,
+    loc_header_shared_ids: pd.DataFrame,
     redirect_id_sharing_events: list[int],
-    user_cookies: list[Cookie],
-    new_req_urls_list: list[tuple],
+    user_cookies: list[Cookie()],
+    new_req_urls: pd.DataFrame,
 ):
-    """Checks shared IDs against stored user IDs. If match --> cookie sync"""
     cookie_syncs = []
     endpoint_cs_count = {}
 
-    for (
-        edge_param_id_list,
-        edge_path_id_list,
-        edge_loc_id_list,
-        id_shared,
-        req_url,
-    ) in zip(
+    id_sharing_df = pd.DataFrame(redirect_id_sharing_events)
+    data = [
         param_shared_ids,
         path_shared_ids,
         loc_header_shared_ids,
-        redirect_id_sharing_events,
-        new_req_urls_list,
-    ):
+        id_sharing_df,
+        new_req_urls,
+    ]
+
+    shared_ids_df = pd.concat(data, axis=1)
+
+    for (i, row_values) in shared_ids_df.iterrows():
+        (
+            edge_param_id_list,
+            edge_path_id_list,
+            edge_loc_id_list,
+            id_shared,
+            req_url,
+        ) = row_values.to_numpy()
         if id_shared:
             id_found = False
             for id in edge_param_id_list:
@@ -775,7 +768,6 @@ def getCookieSyncs(
                     if idMatch(id, user_cookies):
                         cookie_syncs.append(1)
                         domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
-
                         id_found = True
                         break
             if not id_found:
@@ -789,6 +781,7 @@ def getCookieSyncs(
                 cookie_syncs.append(0)
         else:
             cookie_syncs.append(0)
+
     return cookie_syncs, endpoint_cs_count
 
 
@@ -811,7 +804,7 @@ redirect_column_names = [
     "req_query_cookies_num",
     "tracking_keywords_in_url",
     "query_url_check",
-    "cookie_syncs",
+    "heuristic_cookie_syncs",
 ]
 
 
@@ -821,39 +814,33 @@ def redirect_extraction(
     progress_bar: bool,
     verbose: bool,
     use_memory_fs: Union[bool, None],
-    entity_map: dict[str, str],
+    entity_dict: dict[str, str],
 ):
     # README: only using top 100 sites + 8 case study crawls for alpha testing. Will adjust implementation to handle whole dataset when it is ready
     # README: if only testing a feature function, do not run getRedirectIDSharingEvents(). It takes a long time and will slow down your testing.
 
-    global entity_hash
+    global global_entity_dict
 
     # - - - SQL Data extraction
     connection = sqlite3.connect(crawl_db)
-    cursor = connection.cursor()
 
-    cursor.execute("SELECT new_request_url FROM http_redirects")
-    new_req_urls_list = cursor.fetchall()
-    new_req_urls = pd.DataFrame(new_req_urls_list)
+    new_req_urls = pd.read_sql("SELECT new_request_url FROM http_redirects", connection)
 
-    cursor.execute("SELECT old_request_url FROM http_redirects")
-    old_req_urls = pd.DataFrame(cursor.fetchall())
+    old_req_urls = pd.read_sql("SELECT old_request_url FROM http_redirects", connection)
 
-    cursor.execute("SELECT response_status FROM http_redirects")
-    # add to list
-    response_codes = pd.DataFrame(cursor.fetchall())
+    # response_codes = pd.read_sql("SELECT response_status FROM http_redirects", connection)
 
-    cursor.execute("SELECT headers FROM http_redirects")
-    headers = pd.DataFrame(cursor.fetchall())
+    headers = pd.read_sql("SELECT headers FROM http_redirects", connection)
 
-    cursor.execute("SELECT site_url FROM site_visits")
-    site_urls = pd.DataFrame(cursor.fetchall())
+    # site_urls = pd.read_sql("SELECT site_url FROM site_visits", connection)
 
-    cursor.execute("SELECT host, value, is_session FROM javascript_cookies")
-    js_cookies = cursor.fetchall()
+    js_cookies = pd.read_sql(
+        "SELECT host, value, is_session FROM javascript_cookies", connection
+    )
 
-    cursor.execute("SELECT headers, url FROM http_responses")
-    response_headers = cursor.fetchall()
+    response_headers = pd.read_sql(
+        "SELECT headers, url FROM http_responses", connection
+    )
 
     connection.close()
     # - - -
@@ -871,8 +858,7 @@ def redirect_extraction(
             use_memory_fs=use_memory_fs,
         )
 
-    """README: if only testing a feature function, do not run sharedWithThirdParty(). It takes a long time and will slow down your testing."""
-    # - - - Papadapolous Method
+    # - - - CSync Heuristic Labeling Method
     req_query_strs = new_req_urls.parallel_apply(getQueryStrings)
 
     req_query_str_lens = req_query_strs.parallel_apply(getQueryStringLengths)
@@ -884,7 +870,9 @@ def redirect_extraction(
         js_cookies, response_header_cookies, response_headers
     )
 
-    entity_hash = entity_map  # necessary for pandarallelization format constraints
+    global_entity_dict = (
+        entity_dict  # necessary for pandarallelization format constraints
+    )
     shared_with_third_party = sharedWithThirdParty(old_req_urls, new_req_urls)
 
     (
@@ -892,7 +880,6 @@ def redirect_extraction(
         path_shared_ids,
         loc_header_shared_ids,
         redirect_id_sharing_events,
-        known_cookies,
     ) = getRedirectIDSharingEvents(
         req_query_strs, new_req_urls, headers, shared_with_third_party
     )
@@ -903,18 +890,18 @@ def redirect_extraction(
         "redirects\n",
     )
 
-    cookie_syncs, endpoint_cs_count = getCookieSyncs(
+    heuristic_cookie_syncs, endpoint_cs_count = getHeuristicCookieSyncs(
         param_shared_ids,
         path_shared_ids,
         loc_header_shared_ids,
         redirect_id_sharing_events,
         user_cookies,
-        new_req_urls_list,
+        new_req_urls,
     )
     print(
-        sum(cookie_syncs),
+        sum(heuristic_cookie_syncs),
         "Cookie Sync events labelled out of ",
-        len(cookie_syncs),
+        len(heuristic_cookie_syncs),
         "redirects\n",
     )
 
@@ -946,7 +933,7 @@ def redirect_extraction(
 
     # README: to add features, add feature object to this list, and add corresponding column name to redirect_column_names list above
     redirect_id_sharing_events_df = pd.DataFrame(redirect_id_sharing_events)
-    cookie_syncs_df = pd.DataFrame(cookie_syncs)
+    heuristic_cookie_syncs_df = pd.DataFrame(heuristic_cookie_syncs)
     data = [
         redirect_id_sharing_events_df,
         url_str_lens,
@@ -963,10 +950,10 @@ def redirect_extraction(
         req_query_cookies_num,
         tracking_keywords_in_url,
         query_url_check,
-        cookie_syncs_df,
+        heuristic_cookie_syncs_df,
     ]
     redirect_features_df = pd.concat(data, axis=1, keys=redirect_column_names)
-    return redirect_features_df
+    return redirect_features_df, endpoint_cs_count, user_cookies
 
 
 def feature_extraction(
@@ -975,9 +962,9 @@ def feature_extraction(
     progress_bar: bool,
     verbose: bool,
     use_memory_fs: Union[bool, None],
-    entity_map: dict[str, str],
+    entity_dict: dict[str, str],
 ):
     redirect_features_df = redirect_extraction(
-        crawl_db, parallelize, progress_bar, verbose, use_memory_fs, entity_map
+        crawl_db, parallelize, progress_bar, verbose, use_memory_fs, entity_dict
     )
     return redirect_features_df

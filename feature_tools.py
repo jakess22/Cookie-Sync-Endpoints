@@ -671,7 +671,7 @@ def getRedirectIDSharingEvents(
 
     shared_with_third_party_df = pd.DataFrame(shared_with_third_party)
 
-    # check for id sharing events and output lists of ids shared
+    # check for id sharing events and output lists of ids shared --> the first instance of an ID shared, is an ID sharing event
     data = [
         param_ids,
         path_ids,

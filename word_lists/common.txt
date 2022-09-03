@@ -179,9 +179,11 @@ png
 jpg
 time
 serv
-ru
 svg
 html
 net
 business
 position
+rubicon
+tapad
+adnxs

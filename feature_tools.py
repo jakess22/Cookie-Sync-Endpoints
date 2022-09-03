@@ -629,7 +629,7 @@ def getURLCookieStrings(strings: list[str]):
         cookies_in_string = []  # list of cookie IDs found
         if string != None:
             id_matches = re.finditer(
-                r"(?P<query>&[^=]*?=)?(?P<id>[a-zA-Z0-9_-]{10,})", string
+                r"(?P<query>&[^=]*?=)?(?P<id>[a-zA-Z0-9_-]{11,})", string
             )
             id_matches_list = [i["id"] for i in id_matches]
 

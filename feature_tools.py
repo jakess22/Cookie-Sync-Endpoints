@@ -726,7 +726,7 @@ def incrementCSCount(req_url, endpoint_cs_count):
     return endpoint_cs_count
 
 
-def getHeuristicCookieSyncs(
+def getGroundTruthLabels(
     param_shared_ids: pd.DataFrame,
     path_shared_ids: pd.DataFrame,
     loc_header_shared_ids: pd.DataFrame,
@@ -734,7 +734,14 @@ def getHeuristicCookieSyncs(
     user_cookies: list[Cookie()],
     new_req_urls: pd.DataFrame,
 ):
-    cookie_syncs = []
+    """
+    labels each endpoint with
+        0: no id share, no cookie sync
+        -1: id share, unknown cookie sync
+        1: id share, cookie sync
+    :returns: list of ground truth labels, dict of each endpoint and their Csync count
+    """
+    ground_truth_labels = []
     endpoint_cs_count = {}
 
     id_sharing_df = pd.DataFrame(redirect_id_sharing_events)
@@ -760,30 +767,30 @@ def getHeuristicCookieSyncs(
             id_found = False
             for id in edge_param_id_list:
                 if idMatch(id, user_cookies):
-                    cookie_syncs.append(1)
-                    domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
+                    ground_truth_labels.append(1)
+                    incrementCSCount(req_url, endpoint_cs_count)
                     id_found = True
                     break
             if not id_found:
                 for id in edge_path_id_list:
                     if idMatch(id, user_cookies):
-                        cookie_syncs.append(1)
-                        domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
+                        ground_truth_labels.append(1)
+                        incrementCSCount(req_url, endpoint_cs_count)
                         id_found = True
                         break
             if not id_found:
                 for id in edge_loc_id_list:
                     if idMatch(id, user_cookies):
-                        cookie_syncs.append(1)
-                        domain_cs_count = incrementCSCount(req_url, endpoint_cs_count)
+                        ground_truth_labels.append(1)
+                        incrementCSCount(req_url, endpoint_cs_count)
                         id_found = True
                         break
             if not id_found:
-                cookie_syncs.append(0)
+                ground_truth_labels.append(-1)
         else:
-            cookie_syncs.append(0)
+            ground_truth_labels.append(0)
 
-    return cookie_syncs, endpoint_cs_count
+    return ground_truth_labels, endpoint_cs_count
 
 
 # - - - end of ground truth labeling functions
@@ -891,7 +898,7 @@ def redirect_extraction(
         "redirects\n",
     )
 
-    heuristic_cookie_syncs, endpoint_cs_count = getHeuristicCookieSyncs(
+    ground_truth_labels, endpoint_cs_count = getGroundTruthLabels(
         param_shared_ids,
         path_shared_ids,
         loc_header_shared_ids,
@@ -900,12 +907,23 @@ def redirect_extraction(
         new_req_urls,
     )
     print(
-        sum(heuristic_cookie_syncs),
-        "Cookie Sync events labelled out of ",
-        len(heuristic_cookie_syncs),
-        "redirects\n",
+        ground_truth_labels.count(1),
+        "Cookie Sync events labelled out of",
+        len(ground_truth_labels),
+        "redirects",
     )
-
+    print(
+        ground_truth_labels.count(-1),
+        "ID Share, unknown Cookie Sync events labelled out of",
+        len(ground_truth_labels),
+        "redirects",
+    )
+    print(
+        ground_truth_labels.count(0),
+        "No ID Share, No Cookie Sync events labelled out of",
+        len(ground_truth_labels),
+        "redirects",
+    )
     print("Domain CS counts:")
     for x in endpoint_cs_count:
         print(x, endpoint_cs_count[x])
@@ -934,7 +952,7 @@ def redirect_extraction(
 
     # README: to add features, add feature object to this list, and add corresponding column name to redirect_column_names list above
     redirect_id_sharing_events_df = pd.DataFrame(redirect_id_sharing_events)
-    heuristic_cookie_syncs_df = pd.DataFrame(heuristic_cookie_syncs)
+    ground_truth_df = pd.DataFrame(ground_truth_labels)
     data = [
         redirect_id_sharing_events_df,
         url_str_lens,
@@ -951,7 +969,7 @@ def redirect_extraction(
         req_query_cookies_num,
         tracking_keywords_in_url,
         query_url_check,
-        heuristic_cookie_syncs_df,
+        ground_truth_df,
     ]
     redirect_features_df = pd.concat(data, axis=1, keys=redirect_column_names)
     return redirect_features_df, endpoint_cs_count, user_cookies

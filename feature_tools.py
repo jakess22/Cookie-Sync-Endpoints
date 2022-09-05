@@ -380,48 +380,6 @@ def requestURLContainsUUID(urls: pd.DataFrame) -> list[int]:
 
 
 # - - - Ground Truth Labeling functions - CS events
-def getHeaderCookieStrings(strings: list[str]):
-    """Extract and return cookie_ids from header string"""
-
-    cookies = []
-
-    # extract cookie_id strings
-    for string in strings:
-        cookies_in_string = set()  # list of cookie IDs found
-        if string != None:
-            # Citation (1): Khaleesi cookie extraction method
-            if string.count("=") >= 1:
-                cookie = string.split("=", 1)
-                cookies_in_string |= set(re.split("[^a-zA-Z0-9_=&:-]", cookie[1]))
-                cookies_in_string.add(cookie[1])
-            # remove IDs <= 10 chars
-            cookies_in_string = set([s for s in list(cookies_in_string) if len(s) > 10])
-
-        cookies.append(list(cookies_in_string))
-
-    # parse delimiters
-    delimiters = [":", "&"]
-    for edge_list in cookies:
-        i = 0
-        while i < len(edge_list):
-            pop_check = False
-            for delim in delimiters:
-                if i < len(edge_list):
-                    if delim in edge_list[i]:
-                        split = edge_list[i].split(delim)
-                        edge_list.pop(i)
-                        pop_check = True
-                        for val in split:
-                            if len(val) > 10:
-                                edge_list.append(val)
-                    else:
-                        continue
-            if not pop_check:
-                i += 1
-
-    return cookies
-
-
 def getResponseHeaderCookies(response_headers: pd.DataFrame):
     """return cookie_ids from header"""
 
@@ -438,10 +396,13 @@ def getResponseHeaderCookies(response_headers: pd.DataFrame):
             for header in header_json:
                 if header[0].lower() == "set-cookie":
                     if (
-                        "expires" in header[1] or "Expires" in header[1]
+                        "expires" in header[1].lower() or "max-age" in header[1].lower()
                     ):  # only consider non-session cookies
-                        header_split = header[1].split(";")
-                        set_cookie_headers.append(header_split[0])
+                        set_cookies_split = header[1].split('\n') # multiple set-cookie headers are concatenated with '\n' delimiting
+                        for set_cookie_header in set_cookies_split: # extract each consecutive set-cookie header
+                            cookie_split = set_cookie_header.split(";") # parse cookie value set in each header
+                            cookie_value_split = cookie_split[0].split("=") # split cookie_name=cookie_ID
+                            set_cookie_headers.append(cookie_value_split[1]) # only consider cookie_ID
 
     # extract cookie IDs from parsed headers
     header_cookies = getHeaderCookieStrings(set_cookie_headers)

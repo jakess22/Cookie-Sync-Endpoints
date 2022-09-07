@@ -407,54 +407,6 @@ def getResponseHeaderCookies(response_headers: pd.DataFrame):
     # extract cookie IDs from parsed headers
     header_cookies = getResponseHeaderCookieStrings(set_cookie_headers)
 
-    # filter dates picked up by getCookieStrings()
-    for cookie_list in header_cookies:
-        i = 0
-        while i < len(cookie_list):
-            regex_1 = re.compile(
-                r"[0-9]{1,2}-[A-Z][a-z]{2}-[0-9]{2,4}"
-            )  # 14-Jul-2022, 28-Jul-2022
-            regex_2 = re.compile(
-                r"[A-Z][a-z]{2}[0-9]{1,2}[A-Z][a-z]{2}[0-9]{2,4}"
-            )  # Sat15Jul2023
-            regex_3 = re.compile(
-                r"[A-Z][a-z]{2}[0-9]{1,2}-[A-Z][a-z]{2}-[0-9]{2,4}"
-            )  # Thu14-Jul-2022
-            regex_4 = re.compile(
-                r"[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}"
-            )  # 2022-08-01-21
-
-            if re.fullmatch(regex_1, cookie_list[i]):
-                if len(cookie_list) > 0:
-                    cookie_list.pop(i)
-                continue
-            elif re.fullmatch(regex_2, cookie_list[i]):
-                if len(cookie_list) > 0:
-                    cookie_list.pop(i)
-                continue
-            elif re.fullmatch(regex_3, cookie_list[i]):
-                if len(cookie_list) > 0:
-                    cookie_list.pop(i)
-                continue
-            elif re.fullmatch(regex_4, cookie_list[i]):
-                if len(cookie_list) > 0:
-                    cookie_list.pop(i)
-                continue
-            else:
-                i += 1
-
-    # filter IDs by common false-positive words
-    for cookie_list in header_cookies:
-        i = 0
-        while i < len(cookie_list):
-            word_found = False
-            for common_word in common_words:
-                if common_word in cookie_list[i].lower():
-                    cookie_list.pop(i)
-                    word_found = True
-                    break
-            if not word_found:
-                i += 1
     return header_cookies
 
 

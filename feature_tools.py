@@ -612,7 +612,7 @@ def getResponseHeaderCookieStrings(strings: list[str]):
     return cookies
 
 def getSharedIDStrings(strings: list[str]):
-    cookies = []
+    shared_ids = []
 
     # extract cookie_id strings
     for string in strings:
@@ -623,28 +623,24 @@ def getSharedIDStrings(strings: list[str]):
             )
             id_matches_list = [i["id"] for i in id_matches]
 
-        cookies.append(list(id_matches_list))
+        shared_ids.append(list(id_matches_list))
 
     # filter IDs by common false-positive words
-    for edge_list in cookies:
+    for edge_list in shared_ids:
         i = 0
         while i < len(edge_list):
-            #word_found = False
             pop_check = False
+            id_len = len(edge_list[i])
             for common_word in common_words:
                 if common_word in edge_list[i].lower():
-                    remove_common_word = edge_list[i].lower().replace(common_word, '')
-                    print(common_word, edge_list[i], remove_common_word, '\n')
-                    if len(remove_common_word) <= 10:
+                    id_len -= len(common_word)
+                    if id_len <= 10:
                         edge_list.pop(i)
-                        break
                         pop_check = True
-                    #word_found = True
-                    #break
+                        break
             if not pop_check:
                 i += 1
-
-    return cookies
+    return shared_ids
 
 
 def getRedirectIDSharingEvents(

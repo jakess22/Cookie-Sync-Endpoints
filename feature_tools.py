@@ -186,7 +186,7 @@ def numberOfQueryCookies(query_strs: pd.DataFrame) -> list[int]:
     for query in query_strs:
         cookie_count = []
         if query != None:
-            cookie_count = getCookieStrings(query)
+            cookie_count = getSharedIDStrings(query)
 
         query_cookie_count.append(len(cookie_count))
     return query_cookie_count
@@ -395,17 +395,17 @@ def getResponseHeaderCookies(response_headers: pd.DataFrame):
             # header_json[0] is an array of the format (0: key, 1: value)
             for header in header_json:
                 if header[0].lower() == "set-cookie":
-                    if (
-                        "expires" in header[1].lower() or "max-age" in header[1].lower()
-                    ):  # only consider non-session cookies
-                        set_cookies_split = header[1].split('\n') # multiple set-cookie headers are concatenated with '\n' delimiting
-                        for set_cookie_header in set_cookies_split: # extract each consecutive set-cookie header
+                    set_cookies_split = header[1].split('\n') # multiple set-cookie headers are concatenated with '\n' delimiting
+                    for set_cookie_header in set_cookies_split: # extract each consecutive set-cookie header
+                        if (
+	                        "expires" in set_cookie_header.lower() or "max-age" in set_cookie_header.lower()
+	                    ):  # only consider non-session cookies
                             cookie_split = set_cookie_header.split(";") # parse cookie value set in each header
-                            cookie_value_split = cookie_split[0].split("=") # split cookie_name=cookie_ID
-                            set_cookie_headers.append(cookie_value_split[1]) # only consider cookie_ID
+                            cookie_value_split = cookie_split[0].split("=") # split cookie_name=cookie_ID....
+                            set_cookie_headers.append(cookie_value_split[1]) # only consider cookie_ID.....
 
     # extract cookie IDs from parsed headers
-    header_cookies = getCookieStrings(set_cookie_headers)
+    header_cookies = getResponseHeaderCookieStrings(set_cookie_headers)
 
     # filter dates picked up by getCookieStrings()
     for cookie_list in header_cookies:
@@ -582,7 +582,7 @@ def getLocationHeader(headers: pd.Series):
     return location_headers
 
 
-def getCookieStrings(strings: list[str]):
+def getResponseHeaderCookieStrings(strings: list[str]):
     cookies = []
 
     # extract cookie_id strings
@@ -611,6 +611,41 @@ def getCookieStrings(strings: list[str]):
 
     return cookies
 
+def getSharedIDStrings(strings: list[str]):
+    cookies = []
+
+    # extract cookie_id strings
+    for string in strings:
+        cookies_in_string = []  # list of cookie IDs found
+        if string != None:
+            id_matches = re.finditer(
+                r"(?P<query>&[^=]*?=)?(?P<id>[a-zA-Z0-9_-]{11,})", string
+            )
+            id_matches_list = [i["id"] for i in id_matches]
+
+        cookies.append(list(id_matches_list))
+
+    # filter IDs by common false-positive words
+    for edge_list in cookies:
+        i = 0
+        while i < len(edge_list):
+            #word_found = False
+            pop_check = False
+            for common_word in common_words:
+                if common_word in edge_list[i].lower():
+                    remove_common_word = edge_list[i].lower().replace(common_word, '')
+                    print(common_word, edge_list[i], remove_common_word, '\n')
+                    if len(remove_common_word) <= 10:
+                        edge_list.pop(i)
+                        break
+                        pop_check = True
+                    #word_found = True
+                    #break
+            if not pop_check:
+                i += 1
+
+    return cookies
+
 
 def getRedirectIDSharingEvents(
     url_params: pd.Series(),
@@ -626,10 +661,10 @@ def getRedirectIDSharingEvents(
     url_paths = requested_urls.parallel_apply(getURLPaths)
     location_headers = headers.parallel_apply(getLocationHeader)
 
-    # getCookieStrings() returns a list of possible id-looking-strings for each edge (row) --> returns a 2D list
-    param_ids = url_params.parallel_apply(getCookieStrings)
-    path_ids = url_paths.parallel_apply(getCookieStrings)
-    location_header_ids = location_headers.parallel_apply(getCookieStrings)
+    # getSharedIDStrings() returns a list of possible id-looking-strings for each edge (row) --> returns a 2D list
+    param_ids = url_params.parallel_apply(getSharedIDStrings)
+    path_ids = url_paths.parallel_apply(getSharedIDStrings)
+    location_header_ids = location_headers.parallel_apply(getSharedIDStrings)
 
     shared_with_third_party_df = pd.DataFrame(shared_with_third_party)
 
@@ -678,7 +713,7 @@ def idMatch(id: str, user_cookies: list[Cookie]):
 
 
 def incrementCSCount(req_url, endpoint_cs_count):
-    resource = urlparse(req_url[0])
+    resource = urlparse(req_url)
 
     if resource.hostname in endpoint_cs_count:
         endpoint_cs_count[resource.hostname] += 1

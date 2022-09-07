@@ -600,15 +600,17 @@ def getResponseHeaderCookieStrings(strings: list[str]):
     for edge_list in cookies:
         i = 0
         while i < len(edge_list):
-            word_found = False
+            pop_check = False
+            cookie_len = len(edge_list[i])
             for common_word in common_words:
                 if common_word in edge_list[i].lower():
-                    edge_list.pop(i)
-                    word_found = True
-                    break
-            if not word_found:
+                    cookie_len -= len(common_word)
+                    if cookie_len <= 10:
+                        edge_list.pop(i)
+                        pop_check = True
+                        break
+            if not pop_check:
                 i += 1
-
     return cookies
 
 def getSharedIDStrings(strings: list[str]):
@@ -625,21 +627,6 @@ def getSharedIDStrings(strings: list[str]):
 
         shared_ids.append(list(id_matches_list))
 
-    # filter IDs by common false-positive words
-    for edge_list in shared_ids:
-        i = 0
-        while i < len(edge_list):
-            pop_check = False
-            id_len = len(edge_list[i])
-            for common_word in common_words:
-                if common_word in edge_list[i].lower():
-                    id_len -= len(common_word)
-                    if id_len <= 10:
-                        edge_list.pop(i)
-                        pop_check = True
-                        break
-            if not pop_check:
-                i += 1
     return shared_ids
 
 

@@ -402,7 +402,8 @@ def getResponseHeaderCookies(response_headers: pd.DataFrame):
 	                    ):  # only consider non-session cookies
                             cookie_split = set_cookie_header.split(";") # parse cookie value set in each header
                             cookie_value_split = cookie_split[0].split("=") # split cookie_name=cookie_ID....
-                            set_cookie_headers.append(cookie_value_split[1]) # only consider cookie_ID.....
+                            if len(cookie_value_split) > 1:
+                                set_cookie_headers.append(cookie_value_split[1]) # only consider cookie_ID.....
 
     # extract cookie IDs from parsed headers
     header_cookies = getResponseHeaderCookieStrings(set_cookie_headers)

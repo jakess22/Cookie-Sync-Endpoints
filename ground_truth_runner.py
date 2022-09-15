@@ -1,6 +1,6 @@
 import argparse
 import os
-from feature_tools import *
+from label_ground_truth import *
 
 
 def makeEntityDict():
@@ -97,16 +97,16 @@ if __name__ == "__main__":
         print("- - - - - - - - -\n")
     print("All crawl file features successfully extracted.")
     print("Statistics for all crawls extracted:")
-    print(len(user_cookies), "total user cookies extracted.")
+    print(len(user_cookies), "HTTP and JavaScript cookies extracted.")
     cs_count = 0
     for x in endpoint_cs_dict:
         cs_count += endpoint_cs_dict[x]
     print(cs_count, "total CSyncs labelled.")
 
-    df_final = pd.concat(db_df_list)
+    # to be uncommented out when Kev's features are complete, or implemented in another script
 
-    final_csv = df_final.to_csv("classifier_features_dataset.csv")
-
-    if os.path.exists("classifier_features_dataset.csv"):
-        os.remove("classifier_features_dataset.csv")
-    final_csv = df_final.to_csv(path_or_buf="classifier_features_dataset.csv")
+    # df_final = pd.concat(db_df_list)
+    # final_csv = df_final.to_csv("classifier_features_dataset.csv")
+    # if os.path.exists("classifier_features_dataset.csv"):
+    #    os.remove("classifier_features_dataset.csv")
+    # final_csv = df_final.to_csv(path_or_buf="classifier_features_dataset.csv")

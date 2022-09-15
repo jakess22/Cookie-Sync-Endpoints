@@ -1,27 +1,20 @@
-# README: Feature Tool Creation 
+# README: Ground Truth Labeling 
 ## Files
-### feature_extraction.py
-*Requires feature_tools.py*. 
+### ground_truth_runner.py
+*Requires label_ground_truth.py*. 
 
-Iterates over past crawl data databases in /crawl folder, and extracts features for each crawl by calling feature_tools.py. Outputs "classifier_features_dataset.csv" with all crawl feature data consolidated. Will override any existing file named "classifier_features_dataset.csv".
+Iterates over past crawl data databases in /crawl folder, and labels positive, negative, and unknown cookie matching instances for each crawl by calling label_ground_truth.py. 
 
-To run `feature_extraction.py`: `feature_extraction.py [-h] --par | --no-par [--progress-bar | --no-progress-bar] [-v {0,1,2}]`
+To run `ground_truth_runner.py`: `ground_truth_runner.py [-h] --par | --no-par [--progress-bar | --no-progress-bar] [-v {0,1,2}]`
 
-Typical usage: `feature_extraction.py --par`
+Typical usage: `ground_truth_runner.py --par`
 
-### feature_tools.py
-Iterates over inputted crawl database and extracts individual redirect row (graph edge) features. Returns a `pandas.DataFrame` to feature_extraction.py. 
+### label_ground_truth.py
+Iterates over inputted crawl database. From individual redirect rows (graph edge), labels requests (edges) as positive, negative, or unknown. Returns these labels and their respective domains to ground_truth_runner.py. 
 
 This file is not intended to be used directly.
 
-## Adding Features
-To Add Feature Tools in `feature_tools.py`:
-1. In the SQL Data Extraction section of `redirect_extraction()`, ensure the SQL database column your function requires is loaded.
-2. Write the function in feature_tools.py.
-3. To write a parallelized function, call it using `new_dataframe_column = dataframe_column_passed_as_argument.parallel_apply(function_to_apply)`, with the only parameter of `function_to_apply()` being a `pd.DataFrame` column. 
-4. Have the function return a `list`, `pd.DataFrame` column, or `pd.Series`.
-5. Add the feature object name to the “redirect_column_names” list as a string (the position before `cookie_sync` is suggested).
-6. Add the feature object name to the data variable in the same place as the name in the column name list (the position before `cookie_sync` is suggested).
+
 
 ## Papadapolous Cookie Synchronization Method
 [Paper](https://dl.acm.org/doi/abs/10.1145/3308558.3313542?casa_token=utdQ_eFW7ToAAAAA:cVJlTJdogGREFlOumypH7XDKIDgjvFVO3kctVb4WBGbPI5p3jWtBqS-nQab8GYVrGW4jsJ6yfduN)

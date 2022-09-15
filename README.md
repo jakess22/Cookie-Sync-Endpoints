@@ -10,7 +10,7 @@ To run `ground_truth_runner.py`: `ground_truth_runner.py [-h] --par | --no-par [
 Typical usage: `ground_truth_runner.py --par`
 
 ### label_ground_truth.py
-Iterates over inputted crawl database. From individual redirect rows (graph edge), labels redirect as positive, negative, or unknown. Returns these labels and their respective domains to ground_truth_runner.py. 
+Iterates over inputted crawl database. From individual redirect rows (graph edge), labels redirect as positive, negative, or unknown for cookie matching. Returns these labels and their respective domains to ground_truth_runner.py. 
 
 This file is not intended to be used directly.
 

@@ -311,7 +311,9 @@ def getRedirectIDSharingEvents(
             third_party_check,
         ) = row_values.to_numpy()
 
-        if third_party_check:  # only consider sharing with 3rd parties
+        # if third_party_check:  # only consider sharing with 3rd parties --> to be used if labeling party relations
+        # or,
+        if True:  # --> to be used if not labeling party relations
             if len(edge_param_ids) > 0 or len(edge_path_ids) > 0:
                 id_shared.append(1)
             else:
@@ -445,7 +447,6 @@ def redirect_extraction(
 
     req_query_str_lens = req_query_strs.parallel_apply(getQueryStringLengths)
 
-    # do not add to redirect_features_df
     response_header_cookies = getResponseHeaderCookies(response_headers)
 
     user_cookies = makeCookieObjects(

@@ -80,8 +80,8 @@ def getQueryStringLengths(queries: pd.DataFrame) -> list[int]:
 
 
 # - - - Ground Truth Labeling functions - CS events
-def getResponseHeaderCookies(response_headers: pd.DataFrame):
-    """return cookie_ids from header"""
+def getResponseHeaderIdentifiers(response_headers: pd.DataFrame):
+    """return identifiers from header"""
 
     set_cookie_headers = []
 
@@ -119,61 +119,68 @@ def getResponseHeaderCookies(response_headers: pd.DataFrame):
                                 )  # only consider cookie_ID.....
 
     # extract cookie IDs from parsed headers
-    header_cookies = getResponseHeaderCookieStrings(set_cookie_headers)
+    header_identifiers = getResponseHeaderIdentifierStrings(set_cookie_headers)
 
-    return header_cookies
+    return header_identifiers
 
 
-def makeCookieObjects(
+def makeIdentifierObjects(
     js_cookies: pd.DataFrame,
-    response_header_cookies: list[list[str]],
+    response_header_identifiers: list[list[str]],
     response_headers: pd.DataFrame,
 ):
-    """Convert cookie_Tuple to Cookie objects"""
+    """Convert identifier_Tuple to Identifier objects"""
     """openWPM assigns the expiry of 9999-12-31T21:59:59.000Z
     to cookies that do not have an expiration date (session cookies)"""
 
-    cookie_objects = []
-    # convert js_cookies tuples to Cookie objects
+    identifier_objects = []
+    # convert js_cookies tuples to Identifier objects
     # js_cookie[0] = host
     # js_cooke[1] = value
     # js_cookie[2] = is_session
     for (i, js_cookie) in js_cookies.iterrows():
         if not js_cookie[2]:  # filter session cookies (no expiration date)
             if len(js_cookie[1]) > 10:  # Pap. method string length requirement
-                cookie_found = False
-                for cookie in cookie_objects:  # prevent duplicate cookie IDs
-                    if cookie.value == js_cookie[1]:
-                        cookie_found = True
+                # exclude cookies containing common words
+                value_len = len(js_cookie[1])
+                for common_word in common_words:
+                    if common_word in js_cookie[1]:
+                        value_len -= len(common_word)
+                        if value_len <= 10:
+                            continue
+                id_found = False
+                for identifier in identifier_objects:  # prevent duplicate elements
+                    if identifier.value == js_cookie[1]:
+                        id_found = True
                         break
-                if not cookie_found:  # create new Cookie object
+                if not id_found:  # create new Cookie object
                     resource = urlparse(js_cookie[0])
-                    new_cookie_obj = Cookie(js_cookie[0], js_cookie[1], js_cookie[2])
-                    cookie_objects.append(new_cookie_obj)
+                    new_id_obj = Cookie(js_cookie[0], js_cookie[1], js_cookie[2])
+                    identifier_objects.append(new_id_obj)
 
-    # convert header_cookie strings to Cookie objects
+    # convert header_identifiers strings to Identifier objects
     # reponse_headers[0] = header
     # response_headers[1] = response url
     overlap = 0  # overlap between js_cookies and header_cookies, just out of curiosity
     response_headers_list = response_headers.values.tolist()
-    for (header_cookie_list, response) in zip(
-        response_header_cookies, response_headers_list
+    for (header_identifier_list, response) in zip(
+        response_header_identifiers, response_headers_list
     ):
-        for header_cookie in header_cookie_list:
-            cookie_found = False
-            for cookie_object in cookie_objects:  # prevent duplicate cookies
-                if cookie_object.value == header_cookie:
-                    cookie_found = True
+        for header_identifier in header_identifier_list:
+            id_found = False
+            for identifier_object in identifier_objects:  # prevent duplicate cookies
+                if identifier_object.value == header_identifier:
+                    id_found = True
                     break
-            if not cookie_found:  # create new Cookie object
+            if not id_found:  # create new Cookie object
                 resource = urlparse(response[1])
-                new_cookie_obj = Cookie(host=resource.hostname, value=header_cookie)
-                cookie_objects.append(new_cookie_obj)
+                new_id_obj = Cookie(host=resource.hostname, value=header_identifier)
+                identifier_objects.append(new_id_obj)
             else:
                 overlap += 1
     # print(overlap)
 
-    return cookie_objects
+    return identifier_objects
 
 
 def findEntity(urls: pd.DataFrame) -> list[str]:
@@ -225,7 +232,7 @@ def getURLPaths(urls: pd.DataFrame):
     return paths
 
 
-def getResponseHeaderCookieStrings(strings: list[str]):
+def getResponseHeaderIdentifierStrings(strings: list[str]):
     cookies = []
 
     # extract cookie_id strings
@@ -324,9 +331,9 @@ def getRedirectIDSharingEvents(
     return (param_ids, path_ids, id_shared)
 
 
-def idMatch(id: str, user_cookies: list[Cookie]):
+def idMatch(id: str, user_identifiers: list[Cookie]):
     """Returns if id == a value in user_cookies"""
-    for cookie in user_cookies:
+    for cookie in user_identifiers:
         if cookie.value in id:
             return 1
     return 0
@@ -346,7 +353,7 @@ def getGroundTruthLabels(
     param_shared_ids: pd.DataFrame,
     path_shared_ids: pd.DataFrame,
     redirect_id_sharing_events: list[int],
-    user_cookies: list[Cookie()],
+    user_identifiers: list[Cookie()],
     new_req_urls: pd.DataFrame,
 ):
     """
@@ -379,14 +386,14 @@ def getGroundTruthLabels(
         if id_shared:
             id_found = False
             for id in edge_param_id_list:
-                if idMatch(id, user_cookies):
+                if idMatch(id, user_identifiers):
                     ground_truth_labels.append(1)
                     incrementCSCount(req_url, endpoint_cs_count)
                     id_found = True
                     break
             if not id_found:
                 for id in edge_path_id_list:
-                    if idMatch(id, user_cookies):
+                    if idMatch(id, user_identifiers):
                         ground_truth_labels.append(1)
                         incrementCSCount(req_url, endpoint_cs_count)
                         id_found = True
@@ -447,10 +454,10 @@ def redirect_extraction(
 
     req_query_str_lens = req_query_strs.parallel_apply(getQueryStringLengths)
 
-    response_header_cookies = getResponseHeaderCookies(response_headers)
+    response_header_identifiers = getResponseHeaderIdentifiers(response_headers)
 
-    user_cookies = makeCookieObjects(
-        js_cookies, response_header_cookies, response_headers
+    user_identifiers = makeIdentifierObjects(
+        js_cookies, response_header_identifiers, response_headers
     )
 
     global_entity_dict = (
@@ -476,7 +483,7 @@ def redirect_extraction(
         param_shared_ids,
         path_shared_ids,
         redirect_id_sharing_events,
-        user_cookies,
+        user_identifiers,
         new_req_urls,
     )
     print(
@@ -503,7 +510,7 @@ def redirect_extraction(
     # - - -
 
     redirect_features_df = pd.DataFrame()  # placeholder for Kev's features
-    return redirect_features_df, endpoint_cs_count, user_cookies
+    return redirect_features_df, endpoint_cs_count, user_identifiers
 
 
 def feature_extraction(

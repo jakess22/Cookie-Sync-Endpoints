@@ -49,9 +49,9 @@ if __name__ == '__main__':
     df['pagerank'] = None 
 
     # possible future features
-    #df['cliques'] = None 
-    #df['is_strongly_connected'] = None 
-    #df['neighbor_pos'] = None 
+    #df['cliques'] = None --> is_in_clique?
+    #df['is_strongly_connected'] = None --> is_in_strong_connect_component?
+    #df['neighbor_pos'] = None --> is_neighbor_cookie_syncing?
     #df['2nd_neighbor_pos'] = None 
     # dominating set - in/not in dominating set
     # strongly connected nodes - in/not in strongly connected components
